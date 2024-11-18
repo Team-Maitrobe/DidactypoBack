@@ -57,7 +57,7 @@ class UtilisateurDefi(Base):
     __tablename__ = 'UTILISATEUR_DEFI'
     id_utilisateur = Column(String(15), ForeignKey('UTILISATEUR.pseudo'), primary_key=True)
     id_defi = Column(Integer, ForeignKey('DEFI.id_defi'), primary_key=True)
-    progression = Column(Integer, nullable=False, default=0)
+    date_reussite = Column(String(11), nullable=True)
     
 class UtilisateurBadge(Base):
     __tablename__ = 'UTILISATEUR_BADGE'
