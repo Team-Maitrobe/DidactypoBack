@@ -1,5 +1,6 @@
 from database import Base
-from sqlalchemy import Column, Integer, String, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, Float, DateTime
+from datetime import datetime
 
 class Utilisateur(Base):
     __tablename__ = 'UTILISATEUR'
@@ -44,24 +45,25 @@ class Badge(Base):
 
 class UtilisateurCours(Base):
     __tablename__ = 'UTILISATEUR_COURS'
-    id_utilisateur = Column(String(15), ForeignKey('UTILISATEUR.pseudo'), primary_key=True)
+    pseudo_utilisateur = Column(String(15), ForeignKey('UTILISATEUR.pseudo'), primary_key=True)
     id_cours = Column(Integer, ForeignKey('COURS.id_cours'), primary_key=True)
     progression = Column(Integer, nullable=False, default=0)
     
 class UtilisateurGroupe(Base):
     __tablename__ = 'UTILISATEUR_GROUPE'
-    id_utilisateur = Column(String(15), ForeignKey('UTILISATEUR.pseudo'), primary_key=True)
+    pseudo_utilisateur = Column(String(15), ForeignKey('UTILISATEUR.pseudo'), primary_key=True)
     id_groupe = Column(Integer, ForeignKey('GROUPE.id_groupe'), primary_key=True)
     
 class UtilisateurDefi(Base):
     __tablename__ = 'UTILISATEUR_DEFI'
-    id_utilisateur = Column(String(15), ForeignKey('UTILISATEUR.pseudo'), primary_key=True)
+    pseudo_utilisateur = Column(String(15), ForeignKey('UTILISATEUR.pseudo'), primary_key=True)
     id_defi = Column(Integer, ForeignKey('DEFI.id_defi'), primary_key=True)
-    progression = Column(Integer, nullable=False, default=0)
+    temps_reussite =Column(Float, nullable=True)
+    date_reussite = Column(DateTime, nullable=False, default=datetime.now)
     
 class UtilisateurBadge(Base):
     __tablename__ = 'UTILISATEUR_BADGE'
-    id_utilisateur = Column(String(15), ForeignKey('UTILISATEUR.pseudo'), primary_key=True)
+    pseudo_utilisateur = Column(String(15), ForeignKey('UTILISATEUR.pseudo'), primary_key=True)
     id_badge = Column(Integer, ForeignKey('BADGES.id_badge'), primary_key=True)
     
 class GroupeCours(Base):
