@@ -37,3 +37,15 @@ class UtilisateurDefiModele(UtilisateurDefiBase):
 
     class Config:
         orm_mode = True 
+
+class CoursBase(BaseModel):
+    titre_cours : str
+    description_cours : str
+    duree_cours : int
+    difficulte_cours : int
+
+class CoursModele(CoursBase):
+    id_cours : int
+
+    class Config:
+        orm_mode = True

@@ -6,7 +6,7 @@ from database import SessionLocal, engine
 from fastapi.middleware.cors import CORSMiddleware
 
 import models
-from pydantic_models import UtilisateurBase, UtilisateurModele, DefiBase, DefiModele, UtilisateurDefiBase, UtilisateurDefiModele
+from pydantic_models import UtilisateurBase, UtilisateurModele, DefiBase, DefiModele, UtilisateurDefiBase, UtilisateurDefiModele, CoursBase, CoursModele
 
 from datetime import datetime
 import logging
@@ -88,9 +88,9 @@ async def lire_defis(db: Session = Depends(get_db), skip: int = 0, limit: int = 
     defis = db.query(models.Defi).offset(skip).limit(limit).all()
     return defis
 
-@app.get('/defis/{id_defi}', response_model=List[DefiModele])
-async def lire_infos_defi(id_defi: int, db: Session = Depends(get_db), skip: int = 0, limit: int = 1):
-    defis = db.query(models.Defi).filter(models.Defi.id_defi == id_defi).offset(skip).limit(limit).all()
+@app.get('/defis/{id_defi}', response_model=DefiModele)
+async def lire_infos_defi(id_defi: int, db: Session = Depends(get_db)):
+    defis = db.query(models.Defi).filter(models.Defi.id_defi == id_defi).first()
     return defis
 
 @app.delete('/defis/{id_defi}', response_model=dict)
@@ -237,3 +237,45 @@ async def supprimer_reussite_defi(
         # Gestion des erreurs (rollback en cas d'exception)
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erreur lors de la suppression de la réussite du défi : {str(e)}")
+
+#Cours
+@app.post('/cours/', response_model=CoursModele)
+async def ajouter_cour(cour: CoursBase, db: Session = Depends(get_db)):
+    try:
+        db_cour = models.Cours(**cour.dict())
+        db.add(db_cour)
+        db.commit()
+        db.refresh(db_cour)
+        return db_cour
+    except Exception as e:
+        db.rollback()  # Rollback the transaction if an error occurs
+        raise HTTPException(status_code=500, detail=f"Erreur lors de l'ajout du cours : {str(e)}")
+
+@app.get('/cours/', response_model=List[CoursModele])
+async def lire_cours(db: Session = Depends(get_db), skip: int = 0, limit: int = 100):
+    cours = db.query(models.Cours).offset(skip).limit(limit).all()
+    return cours
+
+@app.get('/cours/{id_cour}', response_model=CoursModele)
+async def lire_infos_cour(id_cour: int, db: Session = Depends(get_db)):
+    cours = db.query(models.Cours).filter(models.Cours.id_cours == id_cour).first()
+    return cours
+
+@app.delete('/cours/{id_cour}', response_model=dict)
+async def supprimer_cour(id_cour: int, db: Session = Depends(get_db)):
+    # Récupérer le cours en fonction de son id
+    db_cour = db.query(models.Cours).filter(models.Cours.id_cours == id_cour).first()
+    
+    # Si le cours n'est pas trouvé, erreur 404
+    if not db_cour:
+        raise HTTPException(status_code=404, detail="Défi non trouvé")
+    
+    # Récupérer titre du cours pour le message de succès
+    titre_cour = db_cour.titre_cours
+    
+    # Supprimer le cours
+    db.delete(db_cour)
+    db.commit()
+    
+    # Message de réussiyte
+    return {"message": f"Défi '{titre_cour}' supprimé avec succès."}
