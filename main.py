@@ -88,6 +88,11 @@ async def lire_defis(db: Session = Depends(get_db), skip: int = 0, limit: int = 
     defis = db.query(models.Defi).offset(skip).limit(limit).all()
     return defis
 
+@app.get('/defis/{id_defi}', response_model=List[DefiModele])
+async def lire_infos_defi(id_defi: int, db: Session = Depends(get_db), skip: int = 0, limit: int = 1):
+    defis = db.query(models.Defi).filter(models.Defi.id_defi == id_defi).offset(skip).limit(limit).all()
+    return defis
+
 @app.delete('/defis/{id_defi}', response_model=dict)
 async def supprimer_defi(id_defi: int, db: Session = Depends(get_db)):
     # Récupérer le défi en fonction de son id
