@@ -140,10 +140,11 @@ async def ajout_reussite_defi(
 
         if existing_reussite:
             # Si l'utilisateur a déjà réussi ce défi, mettre à jour le temps de réussite
-            existing_reussite.temps_reussite = temps_reussite
-            existing_reussite.date_reussite = datetime.now()  # Mettre à jour la date de réussite
-            db.commit()  # Commit les changements dans la base de données
-            db.refresh(existing_reussite)  # Rafraîchir l'instance pour obtenir les nouvelles données
+            if (temps_reussite < existing_reussite.temps_reussite):
+                existing_reussite.temps_reussite = temps_reussite
+                existing_reussite.date_reussite = datetime.now()  # Mettre à jour la date de réussite
+                db.commit()  # Commit les changements dans la base de données
+                db.refresh(existing_reussite)  # Rafraîchir l'instance pour obtenir les nouvelles données
             return existing_reussite  # Retourner la réussite mise à jour
         else:
             # Si l'utilisateur n'a pas encore réussi ce défi, on crée un nouveau record
