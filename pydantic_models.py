@@ -49,3 +49,18 @@ class CoursModele(CoursBase):
 
     class Config:
         orm_mode = True
+
+class SousCoursBase(BaseModel):
+    id_cours_parent: int
+    titre_sous_cours: str
+    contenu_cours: str
+    chemin_img_sous_cours: str = None
+
+    class Config:
+        orm_mode = True
+
+class SousCoursModele(SousCoursBase):
+    id_sous_cours: int
+    
+    class Config:
+        orm_mode = True
