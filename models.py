@@ -1,5 +1,6 @@
 from database import Base
 from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, Float, DateTime
+from sqlalchemy.orm import relationship
 from datetime import datetime
 
 class Utilisateur(Base):
@@ -21,6 +22,16 @@ class Cours(Base):
     description_cours = Column(String(1024), nullable=False)
     duree_cours = Column(Integer, nullable=False)
     difficulte_cours = Column(Integer, nullable=False)
+    
+class SousCours(Base):
+    __tablename__ = 'SOUSCOURS'
+
+    id_sous_cours = Column(Integer, primary_key=True)
+    id_cours_parent = Column(Integer, ForeignKey('COURS.id_cours'), primary_key=True, nullable=False)
+    titre_sous_cours = Column(String(128), nullable=False)
+    contenu_cours = Column(String(1024), nullable=False)
+    chemin_img_sous_cours = Column(String(128), nullable=True)
+    id_prochain_sous_cours = Column(Integer, ForeignKey('SOUSCOURS.id_sous_cours'), nullable=True)
 
 class Groupe(Base):
     __tablename__ = 'GROUPE'

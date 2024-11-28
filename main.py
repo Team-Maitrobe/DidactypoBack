@@ -2,11 +2,12 @@ from fastapi import FastAPI, HTTPException, Depends, Query
 from typing import Annotated, List
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import func
 from database import SessionLocal, engine
 from fastapi.middleware.cors import CORSMiddleware
 
 import models
-from pydantic_models import UtilisateurBase, UtilisateurModele, DefiBase, DefiModele, UtilisateurDefiBase, UtilisateurDefiModele, CoursBase, CoursModele
+from pydantic_models import UtilisateurBase, UtilisateurModele, DefiBase, DefiModele, UtilisateurDefiBase, UtilisateurDefiModele, CoursBase, CoursModele, SousCoursBase, SousCoursModele
 
 from datetime import datetime
 import logging
@@ -280,3 +281,77 @@ async def supprimer_cour(id_cour: int, db: Session = Depends(get_db)):
     
     # Message de réussiyte
     return {"message": f"Défi '{titre_cour}' supprimé avec succès."}
+
+#Sous cours
+def get_next_sous_cours_id(db: Session, id_cours_parent: int) -> int:
+    # Find the maximum existing `id_sous_cours` for this `id_cours_parent`
+    max_id_query = db.query(func.max(models.SousCours.id_sous_cours)).filter(models.SousCours.id_cours_parent == id_cours_parent)
+    max_id = max_id_query.scalar()
+
+    # If there are no existing records for this parent, start at 1
+    return max_id + 1 if max_id else 1
+
+def get_sous_cours(db: Session, id_sous_cours: int) -> models.SousCours:
+    return db.query(models.SousCours).filter(models.SousCours.id_sous_cours == id_sous_cours).first()
+
+def get_sous_cours_by_parent(db: Session, id_cours_parent: int):
+    return db.query(models.SousCours).filter(models.SousCours.id_cours_parent == id_cours_parent).all()
+
+def delete_sous_cours(db: Session, id_sous_cours: int):
+    sous_cours = db.query(models.SousCours).filter(models.SousCours.id_sous_cours == id_sous_cours).first()
+    if sous_cours:
+        db.delete(sous_cours)
+        db.commit()
+        return True
+    return False
+
+@app.post("/sous_cours/", response_model=SousCoursModele)
+def add_sous_cours(sous_cours_data: SousCoursBase, db: Session = Depends(get_db)):
+    # Check if the parent course exists
+    parent_cours = db.query(models.Cours).filter(models.Cours.id_cours == sous_cours_data.id_cours_parent).first()
+    if not parent_cours:
+        raise HTTPException(status_code=404, detail="Parent course not found")
+    
+    # Generate the next SousCours ID specifically for this course
+    next_id = get_next_sous_cours_id(db, sous_cours_data.id_cours_parent)
+
+    # Create the new sous_cours
+    new_sous_cours = models.SousCours(
+        id_cours_parent=sous_cours_data.id_cours_parent,
+        id_sous_cours=next_id,
+        titre_sous_cours=sous_cours_data.titre_sous_cours,
+        contenu_cours=sous_cours_data.contenu_cours,
+        chemin_img_sous_cours=sous_cours_data.chemin_img_sous_cours
+    )
+
+    try:
+        db.add(new_sous_cours)
+        db.commit()
+        db.refresh(new_sous_cours)
+    except Exception as e:
+        db.rollback()  # Ensure the transaction is rolled back on error
+        raise HTTPException(status_code=500, detail=f"Error while adding sub-course: {str(e)}")
+
+    return new_sous_cours
+
+@app.get("/sous_cours/{id_cours_parent}", response_model=List[SousCoursModele])
+def get_sous_cours_by_parent(id_cours_parent: int, db: Session = Depends(get_db)):
+    sous_cours_list = db.query(models.SousCours).filter(models.SousCours.id_cours_parent == id_cours_parent).all()
+    
+    if not sous_cours_list:
+        raise HTTPException(status_code=404, detail="No sub-courses found for this parent course")
+    
+    return sous_cours_list
+
+@app.delete("/sous_cours/{id_sous_cours}", response_model=dict)
+def delete_sous_cours(id_sous_cours: int, db: Session = Depends(get_db)):
+    # Check if the sous_cours exists
+    sous_cours = db.query(models.SousCours).filter(models.SousCours.id_sous_cours == id_sous_cours).first()
+    
+    if not sous_cours:
+        raise HTTPException(status_code=404, detail="Sous-cours not found")
+    
+    db.delete(sous_cours)
+    db.commit()
+
+    return {"message": f"Sous-cours with ID {id_sous_cours} deleted successfully."}
