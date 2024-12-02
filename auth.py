@@ -29,17 +29,14 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
-
 class TokenData(BaseModel):
     pseudo: str | None = None
-
 
 class UtilisateurBase(BaseModel):
     pseudo: str
     email: str | None = None
     full_name: str | None = None
     disabled: bool | None = None
-
 
 class UtilisateurModele(UtilisateurBase):
     mot_de_passe: str
@@ -49,22 +46,17 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-app = FastAPI()
-
 
 def verifier_mdp(plain_password, mot_de_passe):
     return pwd_context.verify(plain_password, mot_de_passe)
 
-
 def get_mdp_hashe(mot_de_passe):
     return pwd_context.hash(mot_de_passe)
-
 
 def get_utilisateur(db, pseudo: str):
     if pseudo in db:
         user_dict = db[pseudo]
         return UtilisateurModele(**user_dict)
-
 
 def authenticate_user(db, pseudo: str, mot_de_passe: str):
     utilisateur = get_utilisateur(db, pseudo)
@@ -73,7 +65,6 @@ def authenticate_user(db, pseudo: str, mot_de_passe: str):
     if not verifier_mdp(mot_de_passe, utilisateur.mot_de_passe):
         return False
     return utilisateur
-
 
 def creer_token_acces(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
@@ -85,12 +76,11 @@ def creer_token_acces(data: dict, expires_delta: timedelta | None = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-
 async def get_utilisateur_courant(token: Annotated[str, Depends(oauth2_scheme)]):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
+        headers={"WWW-Authenticate": "Beaer"},
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
