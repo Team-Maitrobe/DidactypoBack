@@ -52,6 +52,7 @@ class UtilisateurCours(Base):
 class UtilisateurGroupe(Base):
     __tablename__ = 'UTILISATEUR_GROUPE'
     pseudo_utilisateur = Column(String(15), ForeignKey('UTILISATEUR.pseudo'), primary_key=True)
+    est_admin = Column(Boolean, nullable=False)
     id_groupe = Column(Integer, ForeignKey('GROUPE.id_groupe'), primary_key=True)
     
 class UtilisateurDefi(Base):

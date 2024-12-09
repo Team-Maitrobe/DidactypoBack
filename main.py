@@ -6,7 +6,7 @@ from database import SessionLocal, engine
 from fastapi.middleware.cors import CORSMiddleware
 
 import models
-from pydantic_models import UtilisateurBase, UtilisateurModele, DefiBase, DefiModele, UtilisateurDefiBase, UtilisateurDefiModele, CoursBase, CoursModele
+from pydantic_models import UtilisateurBase, UtilisateurModele, DefiBase, DefiModele, UtilisateurDefiBase, UtilisateurDefiModele, CoursBase, CoursModele, GroupeBase, GroupeModele, UtilisateurGroupeBase, UtilisateurGroupeModele
 
 from datetime import datetime
 import logging
@@ -279,3 +279,169 @@ async def supprimer_cour(id_cour: int, db: Session = Depends(get_db)):
     
     # Message de réussiyte
     return {"message": f"Défi '{titre_cour}' supprimé avec succès."}
+
+# Groupes
+
+@app.post('/groupe/', response_model=GroupeModele)
+async def ajouter_groupe(groupe: GroupeBase, db: Session = Depends(get_db)):
+    try:
+        db_groupe = models.Groupe(**groupe.dict())
+        db.add(db_groupe)
+        db.commit()
+        db.refresh(db_groupe)
+        return db_groupe
+    except Exception as e:
+        db.rollback()  # Rollback the transaction if an error occurs
+        raise HTTPException(status_code=500, detail=f"Erreur lors de l'ajout du groupe : {str(e)}")
+
+@app.get('/groupe/', response_model=List[GroupeModele])
+async def lire_groupe(db: Session = Depends(get_db), skip: int = 0, limit: int = 100):
+    groupe = db.query(models.Groupe).offset(skip).limit(limit).all()
+    return groupe
+
+@app.get('/groupe/{id_groupe}', response_model=GroupeModele)
+async def lire_infos_groupe(id_groupe: int, db: Session = Depends(get_db)):
+    groupe = db.query(models.Groupe).filter(models.Groupe.id_groupe == id_groupe).first()
+    return groupe
+
+@app.delete('/groupe/{id_groupe}', response_model=dict)
+async def supprimer_groupe(id_groupe: int, db: Session = Depends(get_db)):
+    # Récupérer le groupe en fonction de son id
+    db_groupe = db.query(models.Groupe).filter(models.Groupe.id_groupe == id_groupe).first()
+    
+    # Si le groupe n'est pas trouvé, erreur 404
+    if not db_groupe:
+        raise HTTPException(status_code=404, detail="groupe non trouvé")
+    
+    # Récupérer nom du groupe pour le message de succès
+    nom_groupe = db_groupe.nom_groupe
+    
+    # Supprimer le groupe
+    db.delete(db_groupe)
+    db.commit()
+    
+    # Message de réussite
+    return {"message": f"groupe '{nom_groupe}' supprimé avec succès."}
+
+
+
+#Groupe d'utilisateurs
+
+@app.post('/groupe_utilisateurs/', response_model=UtilisateurGroupeModele)
+async def ajout_groupe_utilisateurs(
+    id_groupe : int,  # ID du groupe (passé en paramètre de la requête)
+    pseudo_utilisateur: str,  # Pseudo de l'utilisateur (passé en paramètre de la requête)
+    est_admin : bool,  # booleen pour definir l'admin du groupe
+    db: Session = Depends(get_db)  # Dépendance pour obtenir la session de base de données
+):
+    try:
+        # Vérifier si l'utilisateur existe dans la base de données
+        db_utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo_utilisateur).first()
+        if not db_utilisateur:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        
+        # Vérifier si le défi existe dans la base de données
+        db_groupe = db.query(models.Groupe).filter(models.Groupe.id_groupe == id_groupe).first()
+        if not db_groupe:
+            raise HTTPException(status_code=404, detail="Groupe non trouvé")
+        
+        # Vérifier si l'utilisateur appartient deja à ce groupe
+        existing_reussite = db.query(models.UtilisateurGroupe).filter(
+            models.UtilisateurGroupe.pseudo_utilisateur == pseudo_utilisateur,
+            models.UtilisateurGroupe.id_groupe == id_groupe
+        ).first()
+
+        if existing_reussite:
+            # Si l'utilisateur appartient à ce groupe
+            return existing_reussite  # Voir quelle action effectuer ici
+        else:
+            # Si l'utilisateur n'appartient pas a ce groupe, l'ajouter au groupe
+            db_utilisateur_groupe = models.UtilisateurGroupe(
+                pseudo_utilisateur=pseudo_utilisateur,
+                id_groupe=id_groupe,
+                est_admin=est_admin,
+            )
+            db.add(db_utilisateur_groupe)  # Ajouter la nouvelle réussite dans la base de données
+            db.commit()  # Commit les changements
+            db.refresh(db_utilisateur_groupe)  # Rafraîchir l'instance pour obtenir les données mises à jour
+            return db_utilisateur_groupe  # Retourner la nouvelle réussite ajoutée
+    
+    except Exception as e:
+        # Si une erreur se produit, annuler la transaction et retourner un message d'erreur
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erreur lors de l'ajout de la réussite du défi : {str(e)}")
+
+
+@app.get('/groupe_utilisateurs', response_model=List[UtilisateurGroupeModele])
+async def lire_tous_les_groupes_utilisateurs(
+    db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
+    skip: int = 0,  # Paramètre optionnel pour le décalage (pagination)
+    limit: int = 100  # Paramètre optionnel pour la limite du nombre de résultats
+):
+    try:
+        # Récupérer toutes les relations entre groupes et utilisateurs
+        tous_les_groupes_utilisateurs = db.query(models.UtilisateurGroupe).offset(skip).limit(limit).all()
+
+        # Si aucune relation n'est trouvée
+        if not tous_les_groupes_utilisateurs:
+            raise HTTPException(status_code=404, detail="Aucune relation groupe-utilisateur trouvée.")
+        
+        return tous_les_groupes_utilisateurs  # Retourner la liste complète des relations
+    
+    except Exception as e:
+        # Gestion des erreurs
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des relations groupe-utilisateur : {str(e)}")
+
+
+
+@app.get('/groupe_utilisateurs/{pseudo_utilisateur}', response_model=List[UtilisateurGroupeModele])
+async def lire_groupes_d_utilisateur(
+    pseudo_utilisateur: str,  # Pseudo de l'utilisateur dont on veut les groupes
+    db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
+    skip: int = 0,  # Paramètre optionnel pour le décalage (pagination)
+    limit: int = 100  # Paramètre optionnel pour la limite du nombre de résultats
+):
+    try:
+        # Récupérer les groupes auxquels appartient l'utilisateur
+        groupes_utilisateur = db.query(models.UtilisateurGroupe).filter(
+            models.UtilisateurGroupe.pseudo_utilisateur == pseudo_utilisateur
+        ).offset(skip).limit(limit).all()
+
+        # Si aucun groupe n'est trouvé pour cet utilisateur
+        if not groupes_utilisateur:
+            raise HTTPException(status_code=404, detail="Aucun groupe trouvé pour cet utilisateur.")
+        
+        return groupes_utilisateur  # Retourner la liste des groupes de l'utilisateur
+    
+    except Exception as e:
+        # Gestion des erreurs
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des groupes de l'utilisateur : {str(e)}")
+
+
+@app.delete('/groupes_utilisateurs', response_model=dict)
+async def supprimer_relation_utilisateur_groupe(
+    id_groupe: int,  # ID du groupe à supprimer
+    pseudo_utilisateur: str,  # Pseudo de l'utilisateur dont on veut supprimer la relation
+    db: Session = Depends(get_db)  # Dépendance pour obtenir la session de base de données
+):
+    try:
+        # Chercher la relation entre l'utilisateur et le groupe
+        relation = db.query(models.UtilisateurGroupe).filter(
+            models.UtilisateurGroupe.id_groupe == id_groupe,
+            models.UtilisateurGroupe.pseudo_utilisateur == pseudo_utilisateur
+        ).first()
+        
+        # Vérifier si la relation existe
+        if not relation:
+            raise HTTPException(status_code=404, detail="Relation utilisateur-groupe non trouvée.")
+        
+        # Supprimer la relation
+        db.delete(relation)
+        db.commit()
+        
+        # Retourner une réponse avec statut 200 OK
+        return {"detail": "Relation supprimée avec succès."}
+    
+    except Exception as e:
+        # Gestion des erreurs
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la suppression de la relation : {str(e)}")

@@ -49,3 +49,24 @@ class CoursModele(CoursBase):
 
     class Config:
         orm_mode = True
+
+class GroupeBase(BaseModel):
+    nom_groupe : str
+    description_groupe : str
+
+class GroupeModele(GroupeBase):
+    id_groupe : int
+
+    class Config:
+        orm_mode = True
+
+class UtilisateurGroupeBase(BaseModel):
+        pseudo_utilisateur : str
+        id_groupe : int
+        est_admin : bool
+
+
+class UtilisateurGroupeModele(UtilisateurGroupeBase):
+    class Config:
+        orm_mode = True 
+
