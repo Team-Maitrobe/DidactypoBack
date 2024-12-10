@@ -28,8 +28,8 @@ class SousCours(Base):
 
     id_sous_cours = Column(Integer, primary_key=True)
     id_cours_parent = Column(Integer, ForeignKey('COURS.id_cours'), primary_key=True, nullable=False)
-    titre_sous_cours = Column(String(128), nullable=False)
-    contenu_cours = Column(String(1024), nullable=False)
+    titre_sous_cours = Column(String(128), nullable=True)
+    contenu_cours = Column(String(1024), nullable=True)
     chemin_img_sous_cours = Column(String(128), nullable=True)
     id_prochain_sous_cours = Column(Integer, ForeignKey('SOUSCOURS.id_sous_cours'), nullable=True)
 
