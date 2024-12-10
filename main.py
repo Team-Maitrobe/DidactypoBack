@@ -179,19 +179,6 @@ async def login_pour_token_acces(
     return Token(access_token=access_token, token_type="bearer")
 
 
-# Pydantic schema for badges
-from pydantic import BaseModel
-
-
-class BadgeModele(BaseModel):
-    id: int
-    user_id: int
-    badge_name: str
-
-    class Config:
-        orm_mode = True
-
-
 @app.get("/utilisateurs/moi/badge/", response_model=List[BadgeModele])
 async def lire_ses_badges(
     current_user: Annotated[Utilisateur, Depends(get_utilisateur_courant)],
