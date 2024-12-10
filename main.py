@@ -7,7 +7,7 @@ from database import SessionLocal, engine
 from fastapi.middleware.cors import CORSMiddleware
 
 import models
-from pydantic_models import UtilisateurBase, UtilisateurModele, DefiBase, DefiModele, UtilisateurDefiBase, UtilisateurDefiModele, CoursBase, CoursModele, SousCoursBase, SousCoursModele, GroupeBase, GroupeModele, UtilisateurGroupeBase, UtilisateurGroupeModele
+from pydantic_models import UtilisateurBase, UtilisateurModele, DefiBase, DefiModele, UtilisateurDefiBase, UtilisateurDefiModele, BadgeBase, BadgeModele, CoursBase, CoursModele, SousCoursBase, SousCoursModele, GroupeBase, GroupeModele, UtilisateurGroupeBase, UtilisateurGroupeModele
 
 from datetime import datetime
 import logging
@@ -47,6 +47,7 @@ models.Base.metadata.create_all(bind=engine)
 @app.post('/utilisateurs/', response_model=UtilisateurModele)
 async def creer_utilisateur(utilisateur: UtilisateurBase, db: Session = Depends(get_db)):
     try:
+        utilisateur.mot_de_passe = get_mdp_hashe(utilisateur.mot_de_passe)
         db_utilisateur = models.Utilisateur(**utilisateur.dict())
         db.add(db_utilisateur)
         db.commit()
@@ -70,6 +71,125 @@ async def supprimer_utilisateur(pseudo: str, db: Session = Depends(get_db)):
     db.delete(db_utilisateur)
     db.commit()
     return {"message": f"Utilisateur '{pseudo}' supprimé avec succès."}
+
+from auth import  Token, TokenData, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM, pwd_context, oauth2_scheme
+from datetime import datetime, timedelta, timezone
+from typing import Annotated
+
+import jwt
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jwt.exceptions import InvalidTokenError
+from passlib.context import CryptContext
+from pydantic import BaseModel
+
+from pydantic_models import UtilisateurBase, UtilisateurModele
+
+from datetime import timedelta, datetime, timezone
+from typing import Annotated, List
+
+import jwt
+from fastapi import Depends, HTTPException, status
+from passlib.context import CryptContext
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
+from models import Utilisateur, Badge
+from auth import Token, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM, oauth2_scheme, pwd_context
+
+
+# Define password hash verification
+def verifier_mdp(plain_password, mot_de_passe):
+    return pwd_context.verify(plain_password, mot_de_passe)
+
+
+def get_mdp_hashe(mot_de_passe):
+    return pwd_context.hash(mot_de_passe)
+
+
+# Fetch user logic
+def get_utilisateur(db, pseudo: str):
+    utilisateur = db.query(Utilisateur).filter(Utilisateur.pseudo == pseudo).first()
+    if utilisateur:
+        return utilisateur
+    return None
+
+
+def authenticate_user(db, pseudo: str, mot_de_passe: str):
+    utilisateur = get_utilisateur(db, pseudo)
+    if not utilisateur:
+        return False
+    if not verifier_mdp(mot_de_passe, utilisateur.mot_de_passe):
+        return False
+    return utilisateur
+
+
+# Token creation logic
+def creer_token_acces(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+# JWT decode & user authentication
+async def get_utilisateur_courant(token: Annotated[str, Depends(oauth2_scheme)], db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        pseudo: str = payload.get("sub")
+        if not pseudo:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials"
+            )
+        utilisateur = db.query(Utilisateur).filter(Utilisateur.pseudo == pseudo).first()
+        if not utilisateur:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User does not exist"
+            )
+        return utilisateur
+    except jwt.PyJWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials"
+        )
+
+#/default/lire_utilisateurs_utilisateurs__get
+# Token endpoint
+@app.post("/token")
+async def login_pour_token_acces(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db=Depends(get_db)
+) -> Token:
+    utilisateur = authenticate_user(db, form_data.username, form_data.password)
+    if not utilisateur:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Mot de passe ou pseudo incorrecte",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = creer_token_acces(
+        data={"sub": utilisateur.pseudo}, expires_delta=access_token_expires
+    )
+    return Token(access_token=access_token, token_type="bearer")
+
+
+@app.get("/utilisateurs/moi/badge/", response_model=List[BadgeModele])
+async def lire_ses_badges(
+    current_user: Annotated[Utilisateur, Depends(get_utilisateur_courant)],
+    db: Session = Depends(get_db),
+    skip: int = 0,
+    limit: int = 100,
+):
+    # Query only badges belonging to the authenticated user
+    badges = db.query(Badge).filter(Badge.user_id == current_user.id).offset(skip).limit(limit).all()
+    # Serialize database models into Pydantic models
+    return [BadgeModele.from_orm(badge) for badge in badges]
 
 # Defi Routes
 @app.post('/defis/', response_model=DefiModele)

@@ -27,6 +27,17 @@ class DefiModele(DefiBase):
     class Config:
         orm_mode = True 
 
+class BadgeBase(BaseModel):
+    titre_badge: str
+    description_badge: str
+    image_badge: str
+
+class BadgeModele(BadgeBase):
+    id_badge: int
+
+    class Config:
+        orm_mode = True
+
 class UtilisateurDefiBase(BaseModel):
     id_defi: int
     pseudo_utilisateur: str
