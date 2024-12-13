@@ -95,6 +95,17 @@ async def supprimer_utilisateur(pseudo: str, db: Session = Depends(get_db)):
     return {"message": f"Utilisateur '{pseudo}' supprimé avec succès."}
 
 #Utilisateur stats
+@app.patch('/stats/temps', response_model=UtilisateurBase)
+async def ajouter_stats_temps_defi(pseudo: str = Query(...), temps: float = Query(...), db: Session = Depends(get_db)):
+    utilisateur = get_utilisateur(db, pseudo)
+
+    if not utilisateur:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+    
+    utilisateur.tempsTotal += temps
+    db.commit()  # Commit the changes to the database
+    return utilisateur  # Return the updated user object
+        
 @app.get('/stats/{pseudo}', response_model=StatsUtilisateur)
 async def lire_stats_utilisateur(pseudo: str, db: Session = Depends(get_db)):
     utilisateur = get_utilisateur(db, pseudo)
@@ -256,15 +267,15 @@ async def ajout_reussite_defi(
 ):
     try:
         # Vérifier si l'utilisateur existe dans la base de données
-        db_utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo_utilisateur).first()
-        if not db_utilisateur:
-            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-        
+        db_utilisateur = get_utilisateur(db, pseudo_utilisateur)
+
         # Vérifier si le défi existe dans la base de données
         db_defi = db.query(models.Defi).filter(models.Defi.id_defi == id_defi).first()
         if not db_defi:
             raise HTTPException(status_code=404, detail="Défi non trouvé")
         
+        ajouter_stats_temps_defi(pseudo_utilisateur, temps_reussite)
+
         # Vérifier si l'utilisateur a déjà réussi ce défi
         existing_reussite = db.query(models.UtilisateurDefi).filter(
             models.UtilisateurDefi.pseudo_utilisateur == pseudo_utilisateur,
