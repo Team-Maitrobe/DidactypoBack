@@ -1,16 +1,38 @@
-from fastapi import FastAPI, HTTPException, Depends, Query
-from typing import Annotated, List
+# Imports standards Python
+import logging
+from datetime import datetime, timedelta, timezone
+
+# Imports tiers
+import jwt
+from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func
-from database import SessionLocal, engine
+from fastapi import FastAPI, HTTPException, Depends, Query, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jwt.exceptions import InvalidTokenError
+from pydantic import BaseModel
 
+# Imports internes
+from database import SessionLocal, engine
+from auth import Token, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM, pwd_context, oauth2_scheme
 import models
-from pydantic_models import UtilisateurBase, UtilisateurModele, DefiBase, DefiModele, UtilisateurDefiBase, UtilisateurDefiModele, BadgeBase, BadgeModele, CoursBase, CoursModele, SousCoursBase, SousCoursModele, GroupeBase, GroupeModele, UtilisateurGroupeBase, UtilisateurGroupeModele
+from pydantic_models import (
+    UtilisateurBase, UtilisateurModele,
+    StatsUtilisateur,
+    DefiBase, DefiModele,
+    UtilisateurDefiBase, UtilisateurDefiModele,
+    BadgeBase, BadgeModele,
+    CoursBase, CoursModele,
+    SousCoursBase, SousCoursModele,
+    GroupeBase, GroupeModele,
+    UtilisateurGroupeBase, UtilisateurGroupeModele,
+)
 
-from datetime import datetime
-import logging
+# Typing
+from typing import Annotated, List
+
 
 app = FastAPI()
 
@@ -72,30 +94,20 @@ async def supprimer_utilisateur(pseudo: str, db: Session = Depends(get_db)):
     db.commit()
     return {"message": f"Utilisateur '{pseudo}' supprimé avec succès."}
 
-from auth import  Token, TokenData, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM, pwd_context, oauth2_scheme
-from datetime import datetime, timedelta, timezone
-from typing import Annotated
-
-import jwt
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from jwt.exceptions import InvalidTokenError
-from passlib.context import CryptContext
-from pydantic import BaseModel
-
-from pydantic_models import UtilisateurBase, UtilisateurModele
-
-from datetime import timedelta, datetime, timezone
-from typing import Annotated, List
-
-import jwt
-from fastapi import Depends, HTTPException, status
-from passlib.context import CryptContext
-from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
-from models import Utilisateur, Badge
-from auth import Token, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM, oauth2_scheme, pwd_context
-
+#Utilisateur stats
+@app.get('/stats/{pseudo}', response_model=StatsUtilisateur)
+async def lire_stats_utilisateur(pseudo: str, db: Session = Depends(get_db)):
+    utilisateur = get_utilisateur(db, pseudo)
+    
+    if not utilisateur:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+    
+    # Prepare the data for the response
+    return StatsUtilisateur(
+        moyMotsParMinute=str(utilisateur.moyMotsParMinute or 0),
+        numCours=str(utilisateur.numCours or 0),
+        tempsTotal=str(utilisateur.tempsTotal or 0)
+    )
 
 # Define password hash verification
 def verifier_mdp(plain_password, mot_de_passe):
@@ -108,7 +120,7 @@ def get_mdp_hashe(mot_de_passe):
 
 # Fetch user logic
 def get_utilisateur(db, pseudo: str):
-    utilisateur = db.query(Utilisateur).filter(Utilisateur.pseudo == pseudo).first()
+    utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
     if utilisateur:
         return utilisateur
     return None
@@ -145,11 +157,11 @@ async def get_utilisateur_courant(token: Annotated[str, Depends(oauth2_scheme)],
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Could not validate credentials"
             )
-        utilisateur = db.query(Utilisateur).filter(Utilisateur.pseudo == pseudo).first()
+        utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
         if not utilisateur:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User does not exist"
+                detail="L'utilisateur n'éxiste pas"
             )
         return utilisateur
     except jwt.PyJWTError:
@@ -181,13 +193,13 @@ async def login_pour_token_acces(
 
 @app.get("/utilisateurs/moi/badge/", response_model=List[BadgeModele])
 async def lire_ses_badges(
-    current_user: Annotated[Utilisateur, Depends(get_utilisateur_courant)],
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
     db: Session = Depends(get_db),
     skip: int = 0,
     limit: int = 100,
 ):
     # Query only badges belonging to the authenticated user
-    badges = db.query(Badge).filter(Badge.user_id == current_user.id).offset(skip).limit(limit).all()
+    badges = db.query(models.Badge).filter(models.Badge.user_id == current_user.id).offset(skip).limit(limit).all()
     # Serialize database models into Pydantic models
     return [BadgeModele.from_orm(badge) for badge in badges]
 

@@ -17,6 +17,11 @@ class UtilisateurModele(UtilisateurBase):
     class Config:
         orm_mode = True 
 
+class StatsUtilisateur(BaseModel):
+    moyMotsParMinute: str
+    numCours: str
+    tempsTotal: str
+
 class DefiBase(BaseModel):
     titre_defi: str
     description_defi: str
