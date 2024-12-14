@@ -63,14 +63,6 @@ def get_db():
 # Create tables if they don't exist
 models.Base.metadata.create_all(bind=engine)
 
-<<<<<<< HEAD
-# Fetch user logic
-def get_utilisateur(db, pseudo: str):
-    utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
-    if utilisateur:
-        return utilisateur
-    return None
-=======
 @app.on_event("startup")
 async def on_startup():
     sql_file_path = Path(__file__).parent / "cours.sql"
@@ -85,7 +77,6 @@ async def on_startup():
             print("La base de donnée est déjà initialisée")
     finally:
         db.close()
->>>>>>> 4d8a0dc (wip phpc)
 
 # Fetch user logic
 def get_utilisateur(db, pseudo: str):
