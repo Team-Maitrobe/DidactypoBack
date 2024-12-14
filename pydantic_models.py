@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -56,29 +57,29 @@ class UtilisateurDefiModele(UtilisateurDefiBase):
         orm_mode = True 
 
 class CoursBase(BaseModel):
-    titre_cours : str
-    description_cours : str
-    duree_cours : int
-    difficulte_cours : int
+    titre_cours: str
+    description_cours: str
+    duree_cours: int
+    difficulte_cours: int
 
 class CoursModele(CoursBase):
-    id_cours : int
+    id_cours: int
 
     class Config:
         orm_mode = True
 
 class SousCoursBase(BaseModel):
     id_cours_parent: int
-    titre_sous_cours: str
-    contenu_cours: str
-    chemin_img_sous_cours: str = None
+    titre_sous_cours: Optional[str] = ""  # Valeur par défaut si None
+    contenu_cours: Optional[str] = ""
+    chemin_img_sous_cours: Optional[str] = ""  # Valeur par défaut si None
 
     class Config:
         orm_mode = True
 
 class SousCoursModele(SousCoursBase):
     id_sous_cours: int
-    
+
     class Config:
         orm_mode = True
 

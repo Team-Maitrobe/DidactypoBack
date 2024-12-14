@@ -1,6 +1,8 @@
 # Imports standards Python
 import logging
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Annotated, List
 
 # Imports tiers
 import jwt
@@ -15,7 +17,7 @@ from jwt.exceptions import InvalidTokenError
 from pydantic import BaseModel
 
 # Imports internes
-from database import SessionLocal, engine
+from database import SessionLocal, engine, execute_sql_file, is_initialized
 from auth import Token, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM, pwd_context, oauth2_scheme
 import models
 from pydantic_models import (
@@ -29,10 +31,6 @@ from pydantic_models import (
     GroupeBase, GroupeModele,
     UtilisateurGroupeBase, UtilisateurGroupeModele,
 )
-
-# Typing
-from typing import Annotated, List
-
 
 app = FastAPI()
 
@@ -64,6 +62,30 @@ def get_db():
 
 # Create tables if they don't exist
 models.Base.metadata.create_all(bind=engine)
+
+<<<<<<< HEAD
+# Fetch user logic
+def get_utilisateur(db, pseudo: str):
+    utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
+    if utilisateur:
+        return utilisateur
+    return None
+=======
+@app.on_event("startup")
+async def on_startup():
+    sql_file_path = Path(__file__).parent / "cours.sql"
+
+    db = SessionLocal()
+    try:
+        if not is_initialized(db, models.Cours):
+            # Run the SQL file only if the database is uninitialized
+            execute_sql_file(sql_file_path)
+            print("La base de donnée a été initialisée avec les données existantes")
+        else:
+            print("La base de donnée est déjà initialisée")
+    finally:
+        db.close()
+>>>>>>> 4d8a0dc (wip phpc)
 
 # Fetch user logic
 def get_utilisateur(db, pseudo: str):
