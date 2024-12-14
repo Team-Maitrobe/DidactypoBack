@@ -102,22 +102,16 @@ async def supprimer_utilisateur(pseudo: str, db: Session = Depends(get_db)):
     return {"message": f"Utilisateur '{pseudo}' supprimé avec succès."}
 
 #Utilisateur stats
-@app.patch('/stats/temps', response_model=UtilisateurBase)
-async def ajouter_stats_temps_defi(pseudo: str, temps: float, db: Session = Depends(get_db)):
-    utilisateur = get_utilisateur(db, pseudo)
-    if not utilisateur:
-        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+# @app.patch('/stats/temps', response_model=UtilisateurBase)
+# async def ajouter_stats_temps_defi(pseudo: str = Query(...), temps: float = Query(...), db: Session = Depends(get_db)):
+#     utilisateur = get_utilisateur(db, pseudo)
+
+#     if not utilisateur:
+#         raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
     
-    if temps < 0:
-        raise HTTPException(status_code=400, detail="Temps doit être positif")
-    try:
-        utilisateur.tempsTotal += temps
-        db.commit()  # Commit si tous va bien
-    except Exception as e:
-        db.rollback()  # Rollback en cas d'erreur
-        raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour du temps: {str(e)}")
-    
-    return utilisateur  # Return the updated user object
+#     utilisateur.tempsTotal += temps
+#     db.commit()  # Commit the changes to the database
+#     return utilisateur  # Return the updated user object
         
 @app.get('/stats/{pseudo}', response_model=StatsUtilisateur)
 async def lire_stats_utilisateur(pseudo: str, db: Session = Depends(get_db)):
@@ -261,35 +255,17 @@ async def ajout_reussite_defi(
         db_defi = db.query(models.Defi).filter(models.Defi.id_defi == id_defi).first()
         if not db_defi:
             raise HTTPException(status_code=404, detail="Défi non trouvé")
-        
-        ajouter_stats_temps_defi(pseudo_utilisateur, temps_reussite)
-
-        # Vérifier si l'utilisateur a déjà réussi ce défi
-        existing_reussite = db.query(models.UtilisateurDefi).filter(
-            models.UtilisateurDefi.pseudo_utilisateur == pseudo_utilisateur,
-            models.UtilisateurDefi.id_defi == id_defi
-        ).first()
-
-        if existing_reussite:
-            # Si l'utilisateur a déjà réussi ce défi, mettre à jour le temps de réussite
-            if (temps_reussite < existing_reussite.temps_reussite):
-                existing_reussite.temps_reussite = temps_reussite
-                existing_reussite.date_reussite = datetime.now()  # Mettre à jour la date de réussite
-                db.commit()  # Commit les changements dans la base de données
-                db.refresh(existing_reussite)  # Rafraîchir l'instance pour obtenir les nouvelles données
-            return existing_reussite  # Retourner la réussite mise à jour
-        else:
-            # Si l'utilisateur n'a pas encore réussi ce défi, on crée un nouveau record
-            db_utilisateur_defi = models.UtilisateurDefi(
-                pseudo_utilisateur=pseudo_utilisateur,
-                id_defi=id_defi,
-                temps_reussite=temps_reussite,
-                date_reussite=datetime.now()  # Définir la date de réussite à l'heure actuelle
-            )
-            db.add(db_utilisateur_defi)  # Ajouter la nouvelle réussite dans la base de données
-            db.commit()  # Commit les changements
-            db.refresh(db_utilisateur_defi)  # Rafraîchir l'instance pour obtenir les données mises à jour
-            return db_utilisateur_defi  # Retourner la nouvelle réussite ajoutée
+    
+        db_utilisateur_defi = models.UtilisateurDefi(
+            pseudo_utilisateur=pseudo_utilisateur,
+            id_defi=id_defi,
+            temps_reussite=temps_reussite,
+            date_reussite=datetime.now()  # Définir la date de réussite à l'heure actuelle
+        )
+        db.add(db_utilisateur_defi)  # Ajouter la nouvelle réussite dans la base de données
+        db.commit()  # Commit les changements
+        db.refresh(db_utilisateur_defi)  # Rafraîchir l'instance pour obtenir les données mises à jour
+        return db_utilisateur_defi  # Retourner la nouvelle réussite ajoutée
     
     except Exception as e:
         # Si une erreur se produit, annuler la transaction et retourner un message d'erreur
@@ -306,6 +282,23 @@ async def lire_reussite_defi(
     try:
         # Récupérer toutes les réussites de défi pour tous les utilisateurs
         reussites_defi = db.query(models.UtilisateurDefi).offset(skip).limit(limit).all()
+        # Subquery to get the minimum time for each user and challenge
+        subquery = db.query(
+            models.UtilisateurDefi.pseudo_utilisateur,
+            models.UtilisateurDefi.id_defi,
+            func.min(models.UtilisateurDefi.temps_reussite).label('min_temps_reussite')
+        ).group_by(
+            models.UtilisateurDefi.pseudo_utilisateur,
+            models.UtilisateurDefi.id_defi
+        ).subquery()
+
+        # Join the subquery with the main table to get the full records
+        reussites_defi = db.query(models.UtilisateurDefi).join(
+            subquery,
+            (models.UtilisateurDefi.pseudo_utilisateur == subquery.c.pseudo_utilisateur) &
+            (models.UtilisateurDefi.id_defi == subquery.c.id_defi) &
+            (models.UtilisateurDefi.temps_reussite == subquery.c.min_temps_reussite)
+        ).offset(skip).limit(limit).all()
 
         # Si aucune réussite de défi n'est trouvée
         if not reussites_defi:

@@ -71,7 +71,7 @@ class UtilisateurDefi(Base):
     pseudo_utilisateur = Column(String(15), ForeignKey('UTILISATEUR.pseudo'), primary_key=True)
     id_defi = Column(Integer, ForeignKey('DEFI.id_defi'), primary_key=True)
     temps_reussite =Column(Float, nullable=True)
-    date_reussite = Column(DateTime, nullable=False, default=datetime.now)
+    date_reussite = Column(DateTime, nullable=False, default=datetime.now, primary_key=True)
     
 class UtilisateurBadge(Base):
     __tablename__ = 'UTILISATEUR_BADGE'
