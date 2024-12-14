@@ -724,7 +724,7 @@ async def ajout_gain_badge(
     
     return new_gain
 
-@app.get("/utilisateurs/moi/badge/{pseudo}", response_model=List[BadgeModele])
+@app.get("/badge/{pseudo}", response_model=List[BadgeModele])
 async def lire_ses_badges(
     pseudo: str,
     db: Session = Depends(get_db),
