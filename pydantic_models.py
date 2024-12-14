@@ -17,6 +17,7 @@ class UtilisateurModele(UtilisateurBase):
     class Config:
         orm_mode = True 
 
+#Utilisé uniquement pour afficher les statistiques d'un utilisateur
 class StatsUtilisateur(BaseModel):
     moyMotsParMinute: str
     numCours: str
@@ -41,7 +42,7 @@ class BadgeModele(BadgeBase):
     id_badge: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class UtilisateurDefiBase(BaseModel):
     id_defi: int
@@ -96,8 +97,23 @@ class UtilisateurGroupeBase(BaseModel):
         id_groupe : int
         est_admin : bool
 
-
 class UtilisateurGroupeModele(UtilisateurGroupeBase):
     class Config:
         orm_mode = True 
 
+class UtilisateurCoursBase(BaseModel):
+    pseudo_utilisateur: str
+    id_cours: int
+    progression: int
+
+class UtilisateurCoursModele(UtilisateurCoursBase):
+    class Config:
+        orm_mode = True
+        
+class UtilisateurBadgeBase(BaseModel):
+    pseudo_utilisateur: str
+    id_badge: int
+
+class UtilisateurBadgeModele(UtilisateurBadgeBase):
+    class Config:
+        orm_mode = True

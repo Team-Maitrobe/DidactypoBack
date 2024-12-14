@@ -19,7 +19,7 @@ from database import SessionLocal, engine
 from auth import Token, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM, pwd_context, oauth2_scheme
 import models
 from pydantic_models import (
-    UtilisateurBase, UtilisateurModele,
+    UtilisateurBadgeModele, UtilisateurBase, UtilisateurCoursModele, UtilisateurModele,
     StatsUtilisateur,
     DefiBase, DefiModele,
     UtilisateurDefiBase, UtilisateurDefiModele,
@@ -65,6 +65,13 @@ def get_db():
 # Create tables if they don't exist
 models.Base.metadata.create_all(bind=engine)
 
+# Fetch user logic
+def get_utilisateur(db, pseudo: str):
+    utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
+    if utilisateur:
+        return utilisateur
+    return None
+
 # Utilisateur Routes
 @app.post('/utilisateurs/', response_model=UtilisateurModele)
 async def creer_utilisateur(utilisateur: UtilisateurBase, db: Session = Depends(get_db)):
@@ -86,7 +93,7 @@ async def lire_utilisateurs(db: Session = Depends(get_db), skip: int = 0, limit:
 
 @app.delete('/utilisateurs/{pseudo}', response_model=dict)
 async def supprimer_utilisateur(pseudo: str, db: Session = Depends(get_db)):
-    db_utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
+    db_utilisateur = get_utilisateur(db, pseudo)
     if not db_utilisateur:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
     
@@ -96,14 +103,20 @@ async def supprimer_utilisateur(pseudo: str, db: Session = Depends(get_db)):
 
 #Utilisateur stats
 @app.patch('/stats/temps', response_model=UtilisateurBase)
-async def ajouter_stats_temps_defi(pseudo: str = Query(...), temps: float = Query(...), db: Session = Depends(get_db)):
+async def ajouter_stats_temps_defi(pseudo: str, temps: float, db: Session = Depends(get_db)):
     utilisateur = get_utilisateur(db, pseudo)
-
     if not utilisateur:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
     
-    utilisateur.tempsTotal += temps
-    db.commit()  # Commit the changes to the database
+    if temps < 0:
+        raise HTTPException(status_code=400, detail="Temps doit être positif")
+    try:
+        utilisateur.tempsTotal += temps
+        db.commit()  # Commit si tous va bien
+    except Exception as e:
+        db.rollback()  # Rollback en cas d'erreur
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour du temps: {str(e)}")
+    
     return utilisateur  # Return the updated user object
         
 @app.get('/stats/{pseudo}', response_model=StatsUtilisateur)
@@ -124,18 +137,8 @@ async def lire_stats_utilisateur(pseudo: str, db: Session = Depends(get_db)):
 def verifier_mdp(plain_password, mot_de_passe):
     return pwd_context.verify(plain_password, mot_de_passe)
 
-
 def get_mdp_hashe(mot_de_passe):
     return pwd_context.hash(mot_de_passe)
-
-
-# Fetch user logic
-def get_utilisateur(db, pseudo: str):
-    utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
-    if utilisateur:
-        return utilisateur
-    return None
-
 
 def authenticate_user(db, pseudo: str, mot_de_passe: str):
     utilisateur = get_utilisateur(db, pseudo)
@@ -144,7 +147,6 @@ def authenticate_user(db, pseudo: str, mot_de_passe: str):
     if not verifier_mdp(mot_de_passe, utilisateur.mot_de_passe):
         return False
     return utilisateur
-
 
 # Token creation logic
 def creer_token_acces(data: dict, expires_delta: timedelta | None = None):
@@ -156,7 +158,6 @@ def creer_token_acces(data: dict, expires_delta: timedelta | None = None):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
-
 
 # JWT decode & user authentication
 async def get_utilisateur_courant(token: Annotated[str, Depends(oauth2_scheme)], db: Session = Depends(get_db)):
@@ -200,19 +201,6 @@ async def login_pour_token_acces(
         data={"sub": utilisateur.pseudo}, expires_delta=access_token_expires
     )
     return Token(access_token=access_token, token_type="bearer")
-
-
-@app.get("/utilisateurs/moi/badge/", response_model=List[BadgeModele])
-async def lire_ses_badges(
-    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
-    db: Session = Depends(get_db),
-    skip: int = 0,
-    limit: int = 100,
-):
-    # Query only badges belonging to the authenticated user
-    badges = db.query(models.Badge).filter(models.Badge.user_id == current_user.id).offset(skip).limit(limit).all()
-    # Serialize database models into Pydantic models
-    return [BadgeModele.from_orm(badge) for badge in badges]
 
 # Defi Routes
 @app.post('/defis/', response_model=DefiModele)
@@ -434,22 +422,8 @@ def get_next_sous_cours_id(db: Session, id_cours_parent: int) -> int:
     # If there are no existing records for this parent, start at 1
     return max_id + 1 if max_id else 1
 
-def get_sous_cours(db: Session, id_sous_cours: int) -> models.SousCours:
-    return db.query(models.SousCours).filter(models.SousCours.id_sous_cours == id_sous_cours).first()
-
-def get_sous_cours_by_parent(db: Session, id_cours_parent: int):
-    return db.query(models.SousCours).filter(models.SousCours.id_cours_parent == id_cours_parent).all()
-
-def delete_sous_cours(db: Session, id_sous_cours: int):
-    sous_cours = db.query(models.SousCours).filter(models.SousCours.id_sous_cours == id_sous_cours).first()
-    if sous_cours:
-        db.delete(sous_cours)
-        db.commit()
-        return True
-    return False
-
 @app.post("/sous_cours/", response_model=SousCoursModele)
-def add_sous_cours(sous_cours_data: SousCoursBase, db: Session = Depends(get_db)):
+async def add_sous_cours(sous_cours_data: SousCoursBase, db: Session = Depends(get_db)):
     # Check if the parent course exists
     parent_cours = db.query(models.Cours).filter(models.Cours.id_cours == sous_cours_data.id_cours_parent).first()
     if not parent_cours:
@@ -472,32 +446,71 @@ def add_sous_cours(sous_cours_data: SousCoursBase, db: Session = Depends(get_db)
         db.commit()
         db.refresh(new_sous_cours)
     except Exception as e:
-        db.rollback()  # Ensure the transaction is rolled back on error
+        db.rollback()  # Rollback en cas d'erreur
         raise HTTPException(status_code=500, detail=f"Error while adding sub-course: {str(e)}")
 
     return new_sous_cours
 
 @app.get("/sous_cours/{id_cours_parent}", response_model=List[SousCoursModele])
-def get_sous_cours_by_parent(id_cours_parent: int, db: Session = Depends(get_db)):
+async def get_sous_cours_by_parent(id_cours_parent: int, db: Session = Depends(get_db)):
     sous_cours_list = db.query(models.SousCours).filter(models.SousCours.id_cours_parent == id_cours_parent).all()
     
     if not sous_cours_list:
-        raise HTTPException(status_code=404, detail="No sub-courses found for this parent course")
+        raise HTTPException(status_code=404, detail="Aucun sous-cours trouvé pour ce parent")
     
     return sous_cours_list
 
-@app.delete("/sous_cours/{id_sous_cours}", response_model=dict)
-def delete_sous_cours(id_sous_cours: int, db: Session = Depends(get_db)):
-    # Check if the sous_cours exists
-    sous_cours = db.query(models.SousCours).filter(models.SousCours.id_sous_cours == id_sous_cours).first()
-    
+@app.get("/sous_cours", response_model=SousCoursModele)
+def get_sous_cours(id_sous_cours: int, id_cours_parent: int, db: Session = Depends(get_db)) -> models.SousCours:
+    sous_cours = db.query(models.SousCours).filter(
+        models.SousCours.id_sous_cours == id_sous_cours,
+        models.SousCours.id_cours_parent == id_cours_parent
+    ).first()
+
     if not sous_cours:
-        raise HTTPException(status_code=404, detail="Sous-cours not found")
+        raise HTTPException(status_code=404, detail="Sous-cours non trouvé")
     
+    return sous_cours
+
+@app.delete("/sous_cours/{id_sous_cours}", response_model=dict)
+def delete_sous_cours(id_sous_cours: int, id_cours_parent: int, db: Session = Depends(get_db)):
+    sous_cours = db.query(models.SousCours).filter(
+        models.SousCours.id_sous_cours == id_sous_cours,
+        models.SousCours.id_cours_parent == id_cours_parent
+    ).first()
+
+    if not sous_cours:
+        raise HTTPException(status_code=404, detail="Sous-cours non trouvé")
+    
+    # Delete the sous_cours if found
     db.delete(sous_cours)
     db.commit()
 
-    return {"message": f"Sous-cours with ID {id_sous_cours} deleted successfully."}
+    return {"message": f"Sous-cours avec ID {id_sous_cours} et ID parent {id_cours_parent} supprimé."}
+
+# Complétion cours
+@app.post('/completion_cours', response_model=UtilisateurCoursModele)
+async def ajouter_completion_cours(
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
+    id_cours: int,
+    db: Session = Depends(get_db)):
+    
+    new_completion = models.UtilisateurCours(
+        id_cours=id_cours,
+        pseudo_utilisateur=current_user.id,
+        progression=1 
+    )
+
+    try:
+        db.add(new_completion)
+        db.commit()
+        db.refresh(new_completion)
+    except Exception as e:
+        # Rollback en cas d'erreur
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erreur pendant l'ajout de la completion: {str(e)}")
+
+    return new_completion 
 
 # Groupes
 
@@ -664,3 +677,58 @@ async def supprimer_relation_utilisateur_groupe(
     except Exception as e:
         # Gestion des erreurs
         raise HTTPException(status_code=500, detail=f"Erreur lors de la suppression de la relation : {str(e)}")
+    
+# Badges
+@app.post("/badges/", response_model=BadgeModele)
+async def add_badge(badge_data: BadgeBase, db: Session = Depends(get_db)):
+    # Crée le nouveau badge
+    new_badge = models.Badge(
+        titre_badge = badge_data.titre_badge,
+        description_badge = badge_data.description_badge,
+        image_badge = badge_data.image_badge
+    )
+
+    try:
+        db.add(new_badge)
+        db.commit()
+        db.refresh(new_badge)
+    except Exception as e:
+        db.rollback()  # Rollback en cas d'erreur
+        raise HTTPException(status_code=500, detail=f"Erreur pendant l'ajout du badge: {str(e)}")
+    
+    return new_badge
+
+@app.post("/gain_badge", response_model=UtilisateurBadgeModele)
+async def ajout_gain_badge(
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
+    id_badge: int,
+    db: Session = Depends(get_db)):
+    new_gain = models.UtilisateurBadge(
+        pseudo_utilisateur = current_user.pseudo,
+        id_badge=id_badge
+    )
+    
+    try:
+        db.add(new_gain)
+        db.commit()
+        db.refresh(new_gain)
+    except Exception as e:
+        db.rollback()  # Rollback en cas d'erreur
+        raise HTTPException(status_code=500, detail=f"Erreur pendant l'ajout du gain de badge: {str(e)}")
+    
+    return new_gain
+
+@app.get("/utilisateurs/moi/badge/{pseudo}", response_model=List[BadgeModele])
+async def lire_ses_badges(
+    pseudo: str,
+    db: Session = Depends(get_db),
+    skip: int = 0,
+    limit: int = 100,
+):
+    # Query only badges belonging to the authenticated user
+    infos_badges = db.query(models.UtilisateurBadge).filter(models.UtilisateurBadge.pseudo_utilisateur == pseudo).offset(skip).limit(limit).all()
+    # Serialize database models into Pydantic models
+    
+    badges = [db.query(models.Badge).filter(models.Badge.id_badge == badge.id_badge).first() for badge in infos_badges]
+    badges = [badge for badge in badges if badge is not None]  # Enlever les valeurs None
+    return badges
