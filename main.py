@@ -565,8 +565,8 @@ async def supprimer_groupe(id_groupe: int, db: Session = Depends(get_db)):
 
 #Groupe d'utilisateurs
 
-@app.post('/groupe_utilisateurs/', response_model=UtilisateurGroupeModele)
-async def ajout_groupe_utilisateurs(
+@app.post('/membre_classe/', response_model=UtilisateurGroupeModele)
+async def ajout_membre_classe(
     id_groupe : int,  # ID du groupe (passé en paramètre de la requête)
     pseudo_utilisateur: str,  # Pseudo de l'utilisateur (passé en paramètre de la requête)
     est_admin : bool,  # booleen pour definir l'admin du groupe
@@ -610,21 +610,30 @@ async def ajout_groupe_utilisateurs(
         raise HTTPException(status_code=500, detail=f"Erreur lors de l'ajout de la réussite du défi : {str(e)}")
 
 
-@app.get('/groupe_utilisateurs', response_model=List[UtilisateurGroupeModele])
-async def lire_tous_les_groupes_utilisateurs(
+@app.get('/membre_classe_par_groupe/{id_groupe}', response_model=List[UtilisateurModele])
+async def lire_tous_les_membres_classe(
+    id_groupe: int,
     db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
     skip: int = 0,  # Paramètre optionnel pour le décalage (pagination)
     limit: int = 100  # Paramètre optionnel pour la limite du nombre de résultats
 ):
     try:
-        # Récupérer toutes les relations entre groupes et utilisateurs
-        tous_les_groupes_utilisateurs = db.query(models.UtilisateurGroupe).offset(skip).limit(limit).all()
+        # Récupérer les relations entre groupes et utilisateurs pour un groupe spécifique
+        membres_classe = db.query(models.UtilisateurGroupe).filter(models.UtilisateurGroupe.id_groupe == id_groupe).offset(skip).limit(limit).all()
 
-        # Si aucune relation n'est trouvée
-        if not tous_les_groupes_utilisateurs:
+        if not membres_classe:
             raise HTTPException(status_code=404, detail="Aucune relation groupe-utilisateur trouvée.")
-        
-        return tous_les_groupes_utilisateurs  # Retourner la liste complète des relations
+
+        # Extraire les pseudos des membres
+        pseudos_membres = [membre.pseudo_utilisateur for membre in membres_classe]
+
+        # Récupérer les informations des utilisateurs (modèle Utilisateur) en fonction des pseudos
+        utilisateurs = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo.in_(pseudos_membres)).all()
+
+        if not utilisateurs:
+            raise HTTPException(status_code=404, detail="Aucun utilisateur trouvé pour ce groupe.")
+
+        return utilisateurs
     
     except Exception as e:
         # Gestion des erreurs
@@ -632,31 +641,29 @@ async def lire_tous_les_groupes_utilisateurs(
 
 
 
-@app.get('/groupe_utilisateurs/{pseudo_utilisateur}', response_model=List[UtilisateurGroupeModele])
+@app.get('/membre_classe/{pseudo_utilisateur}', response_model=UtilisateurGroupeModele)
 async def lire_groupes_d_utilisateur(
     pseudo_utilisateur: str,  # Pseudo de l'utilisateur dont on veut les groupes
     db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
-    skip: int = 0,  # Paramètre optionnel pour le décalage (pagination)
-    limit: int = 100  # Paramètre optionnel pour la limite du nombre de résultats
 ):
     try:
-        # Récupérer les groupes auxquels appartient l'utilisateur
-        groupes_utilisateur = db.query(models.UtilisateurGroupe).filter(
+        # Récupérer le groupe auxquel appartient l'utilisateur
+        groupe_utilisateur = db.query(models.UtilisateurGroupe).filter(
             models.UtilisateurGroupe.pseudo_utilisateur == pseudo_utilisateur
-        ).offset(skip).limit(limit).all()
+        ).first()
 
         # Si aucun groupe n'est trouvé pour cet utilisateur
-        if not groupes_utilisateur:
+        if not groupe_utilisateur:
             raise HTTPException(status_code=404, detail="Aucun groupe trouvé pour cet utilisateur.")
         
-        return groupes_utilisateur  # Retourner la liste des groupes de l'utilisateur
+        return groupe_utilisateur  # Retourner la liste des groupes de l'utilisateur
     
     except Exception as e:
         # Gestion des erreurs
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des groupes de l'utilisateur : {str(e)}")
 
 
-@app.delete('/groupes_utilisateurs', response_model=dict)
+@app.delete('/membres_classe', response_model=dict)
 async def supprimer_relation_utilisateur_groupe(
     id_groupe: int,  # ID du groupe à supprimer
     pseudo_utilisateur: str,  # Pseudo de l'utilisateur dont on veut supprimer la relation
