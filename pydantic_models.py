@@ -17,6 +17,11 @@ class UtilisateurBase(BaseModel):
 class UtilisateurModele(UtilisateurBase):
     class Config:
         orm_mode = True 
+        
+class UtilisateurRenvoye(BaseModel):
+    pseudo: str
+    nom: str
+    prenom: str
 
 #Utilisé uniquement pour afficher les statistiques d'un utilisateur
 class StatsUtilisateur(BaseModel):

@@ -21,15 +21,17 @@ from database import SessionLocal, engine, execute_sql_file, is_initialized
 from auth import Token, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM, pwd_context, oauth2_scheme
 import models
 from pydantic_models import (
-    UtilisateurBadgeModele, UtilisateurBase, UtilisateurCoursModele, UtilisateurModele,
-    StatsUtilisateur,
+    UtilisateurBase,  UtilisateurModele,
+    StatsUtilisateur, UtilisateurRenvoye,
     DefiBase, DefiModele,
     UtilisateurDefiBase, UtilisateurDefiModele,
     BadgeBase, BadgeModele,
     CoursBase, CoursModele,
+    UtilisateurCoursModele,
     SousCoursBase, SousCoursModele,
     GroupeBase, GroupeModele,
     UtilisateurGroupeBase, UtilisateurGroupeModele,
+    UtilisateurBadgeModele,
 )
 
 app = FastAPI()
@@ -99,10 +101,16 @@ async def creer_utilisateur(utilisateur: UtilisateurBase, db: Session = Depends(
         db.rollback()  # Rollback the transaction if an error occurs
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get('/utilisateurs/', response_model=List[UtilisateurModele])
+@app.get('/utilisateurs/', response_model=List[UtilisateurRenvoye])
 async def lire_utilisateurs(db: Session = Depends(get_db), skip: int = 0, limit: int = 100):
-    utilisateurs = db.query(models.Utilisateur).offset(skip).limit(limit).all()
-    return utilisateurs
+    try:
+        utilisateurs = db.query(models.Utilisateur).offset(skip).limit(limit).all()
+        if not utilisateurs:
+            raise HTTPException(status_code=404, detail="No users found")
+        valUtilisateurs = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom) for user in utilisateurs]
+        return valUtilisateurs
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error fetching users")
 
 @app.delete('/utilisateurs/{pseudo}', response_model=dict)
 async def supprimer_utilisateur(pseudo: str, db: Session = Depends(get_db)):
@@ -208,6 +216,12 @@ async def login_pour_token_acces(
         data={"sub": utilisateur.pseudo}, expires_delta=access_token_expires
     )
     return Token(access_token=access_token, token_type="bearer")
+
+@app.get('/utilisateur/moi')
+async def lire_utilisateur_courant(
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)]
+):
+    return current_user
 
 # Defi Routes
 @app.post('/defis/', response_model=DefiModele)
