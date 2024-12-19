@@ -110,7 +110,7 @@ async def lire_utilisateurs(db: Session = Depends(get_db), skip: int = 0, limit:
         valUtilisateurs = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom) for user in utilisateurs]
         return valUtilisateurs
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Error fetching users")
+        raise HTTPException(status_code=500, detail=f"Error fetching users: {str(e)}")
 
 @app.delete('/utilisateurs/{pseudo}', response_model=dict)
 async def supprimer_utilisateur(pseudo: str, db: Session = Depends(get_db)):
@@ -533,18 +533,59 @@ async def ajouter_completion_cours(
     return new_completion 
 
 # Groupes
-
-@app.post('/groupe/', response_model=GroupeModele)
-async def ajouter_groupe(groupe: GroupeBase, db: Session = Depends(get_db)):
+@app.post('/groupe/', response_model=GroupeBase)
+async def ajouter_groupe(
+    groupe: GroupeBase,
+    pseudo_admin: str,
+    db: Session = Depends(get_db)):
     try:
+        # Case 1: Ensure the group data is valid
+        if not groupe:
+            raise HTTPException(status_code=400, detail="Données de groupe invalides")
+    
+
+        # Create new group
         db_groupe = models.Groupe(**groupe.dict())
         db.add(db_groupe)
         db.commit()
         db.refresh(db_groupe)
+        
+        # Case 3: Check if the group ID was correctly generated
+        if not db_groupe.id_groupe:
+            raise HTTPException(status_code=500, detail="Erreur de création du groupe: ID non généré")
+        
+        # Case 4: Check if the admin user exists in the database
+        existing_user = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo_admin).first()
+        if not existing_user:
+            raise HTTPException(status_code=404, detail=f"Utilisateur avec le pseudo '{pseudo_admin}' non trouvé")
+
+        # Case 5: Check if the user is already part of another group as an admin
+        existing_user_group = db.query(models.UtilisateurGroupe).filter(
+            models.UtilisateurGroupe.pseudo_utilisateur == pseudo_admin,
+            models.UtilisateurGroupe.est_admin == True
+        ).first()
+        if existing_user_group:
+            raise HTTPException(status_code=400, detail=f"L'utilisateur '{pseudo_admin}' est déjà administrateur dans un autre groupe.")
+
+        # Add the user to the group
+        db_utilisateur_groupe = models.UtilisateurGroupe(
+            pseudo_utilisateur=pseudo_admin,
+            id_groupe=db_groupe.id_groupe,
+            est_admin=True,
+        )
+        
+        db.add(db_utilisateur_groupe)
+        db.commit()
+        db.refresh(db_utilisateur_groupe)
+
         return db_groupe
+
     except Exception as e:
-        db.rollback()  # Rollback the transaction if an error occurs
+        db.rollback()  # Rollback in case of any error
+        # Case 8: General error handling
         raise HTTPException(status_code=500, detail=f"Erreur lors de l'ajout du groupe : {str(e)}")
+
+
 
 @app.get('/groupe/', response_model=List[GroupeModele])
 async def lire_groupe(db: Session = Depends(get_db), skip: int = 0, limit: int = 100):
@@ -653,7 +694,34 @@ async def lire_tous_les_membres_classe(
         # Gestion des erreurs
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des relations groupe-utilisateur : {str(e)}")
 
+@app.get('/admins_groupe/{id_groupe}', response_model=List[UtilisateurModele])
+async def lire_tous_les_admins_classe(
+    id_groupe: int,
+    db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
+    skip: int = 0,  # Paramètre optionnel pour le décalage (pagination)
+    limit: int = 100  # Paramètre optionnel pour la limite du nombre de résultats
+):
+    try:
+        # Récupérer les relations entre groupes et utilisateurs pour un groupe spécifique
+        membres_classe = db.query(models.UtilisateurGroupe).filter(models.UtilisateurGroupe.id_groupe == id_groupe and models.UtilisateurGroupe.est_admin == True).offset(skip).limit(limit).all()
 
+        if not membres_classe:
+            raise HTTPException(status_code=404, detail="Aucun admin trouvé.")
+
+        # Extraire les pseudos des membres
+        pseudos_membres = [membre.pseudo_utilisateur for membre in membres_classe]
+
+        # Récupérer les informations des utilisateurs (modèle Utilisateur) en fonction des pseudos
+        utilisateurs = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo.in_(pseudos_membres)).all()
+
+        if not utilisateurs:
+            raise HTTPException(status_code=404, detail="Aucun utilisateur trouvé pour ce groupe.")
+
+        return utilisateurs
+    
+    except Exception as e:
+        # Gestion des erreurs
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des relations groupe-utilisateur : {str(e)}")
 
 @app.get('/membre_classe/{pseudo_utilisateur}', response_model=UtilisateurGroupeModele)
 async def lire_groupes_d_utilisateur(
