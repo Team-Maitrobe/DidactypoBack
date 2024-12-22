@@ -26,12 +26,11 @@ class Cours(Base):
 class SousCours(Base):
     __tablename__ = 'SOUSCOURS'
 
-    id_sous_cours = Column(Integer, primary_key=True)
-    id_cours_parent = Column(Integer, ForeignKey('COURS.id_cours'), primary_key=True, nullable=False)
+    id_cours_parent = Column(Integer, ForeignKey('COURS.id_cours'), nullable=False, primary_key=True)
+    id_sous_cours = Column(Integer, nullable=False, primary_key=True)
     titre_sous_cours = Column(String(128), nullable=True)
     contenu_cours = Column(String(1024), nullable=True)
     chemin_img_sous_cours = Column(String(128), nullable=True)
-    id_prochain_sous_cours = Column(Integer, ForeignKey('SOUSCOURS.id_sous_cours'), nullable=True)
 
 class Groupe(Base):
     __tablename__ = 'GROUPE'
@@ -71,7 +70,7 @@ class UtilisateurDefi(Base):
     pseudo_utilisateur = Column(String(15), ForeignKey('UTILISATEUR.pseudo'), primary_key=True)
     id_defi = Column(Integer, ForeignKey('DEFI.id_defi'), primary_key=True)
     temps_reussite =Column(Float, nullable=True)
-    date_reussite = Column(DateTime, nullable=False, default=datetime.now)
+    date_reussite = Column(DateTime, nullable=False, default=datetime.now, primary_key=True)
     
 class UtilisateurBadge(Base):
     __tablename__ = 'UTILISATEUR_BADGE'

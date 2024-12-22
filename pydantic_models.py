@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -16,7 +17,13 @@ class UtilisateurBase(BaseModel):
 class UtilisateurModele(UtilisateurBase):
     class Config:
         orm_mode = True 
+        
+class UtilisateurRenvoye(BaseModel):
+    pseudo: str
+    nom: str
+    prenom: str
 
+#Utilisé uniquement pour afficher les statistiques d'un utilisateur
 class StatsUtilisateur(BaseModel):
     moyMotsParMinute: str
     numCours: str
@@ -41,7 +48,7 @@ class BadgeModele(BadgeBase):
     id_badge: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class UtilisateurDefiBase(BaseModel):
     id_defi: int
@@ -55,29 +62,29 @@ class UtilisateurDefiModele(UtilisateurDefiBase):
         orm_mode = True 
 
 class CoursBase(BaseModel):
-    titre_cours : str
-    description_cours : str
-    duree_cours : int
-    difficulte_cours : int
+    titre_cours: str
+    description_cours: str
+    duree_cours: int
+    difficulte_cours: int
 
 class CoursModele(CoursBase):
-    id_cours : int
+    id_cours: int
 
     class Config:
         orm_mode = True
 
 class SousCoursBase(BaseModel):
     id_cours_parent: int
-    titre_sous_cours: str
-    contenu_cours: str
-    chemin_img_sous_cours: str = None
+    titre_sous_cours: Optional[str] = ""  # Valeur par défaut si None
+    contenu_cours: Optional[str] = ""
+    chemin_img_sous_cours: Optional[str] = ""  # Valeur par défaut si None
 
     class Config:
         orm_mode = True
 
 class SousCoursModele(SousCoursBase):
     id_sous_cours: int
-    
+
     class Config:
         orm_mode = True
 
@@ -96,8 +103,23 @@ class UtilisateurGroupeBase(BaseModel):
         id_groupe : int
         est_admin : bool
 
-
 class UtilisateurGroupeModele(UtilisateurGroupeBase):
     class Config:
         orm_mode = True 
 
+class UtilisateurCoursBase(BaseModel):
+    pseudo_utilisateur: str
+    id_cours: int
+    progression: int
+
+class UtilisateurCoursModele(UtilisateurCoursBase):
+    class Config:
+        orm_mode = True
+        
+class UtilisateurBadgeBase(BaseModel):
+    pseudo_utilisateur: str
+    id_badge: int
+
+class UtilisateurBadgeModele(UtilisateurBadgeBase):
+    class Config:
+        orm_mode = True
