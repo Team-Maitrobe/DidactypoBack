@@ -37,6 +37,10 @@ class Groupe(Base):
     id_groupe = Column(Integer, primary_key=True, autoincrement=True)
     nom_groupe = Column(String(128), nullable=False)
     description_groupe = Column(String(1024), nullable=False)
+    
+    # Définition de la relation entre Groupe et UtilisateurGroupe
+    # Lorsque le groupe est supprimé, toutes les relations dans UtilisateurGroupe sont supprimées
+    utilisateurs = relationship("UtilisateurGroupe", back_populates="groupe", cascade="all, delete-orphan")
 
 class Defi(Base):
     __tablename__ = 'DEFI'
@@ -64,6 +68,9 @@ class UtilisateurGroupe(Base):
     pseudo_utilisateur = Column(String(15), ForeignKey('UTILISATEUR.pseudo'), primary_key=True)
     est_admin = Column(Boolean, nullable=False)
     id_groupe = Column(Integer, ForeignKey('GROUPE.id_groupe'), primary_key=True)
+    
+     # Relation inverse avec Groupe
+    groupe = relationship("Groupe", back_populates="utilisateurs")
     
 class UtilisateurDefi(Base):
     __tablename__ = 'UTILISATEUR_DEFI'

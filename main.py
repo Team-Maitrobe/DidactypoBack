@@ -221,7 +221,10 @@ async def login_pour_token_acces(
 async def lire_utilisateur_courant(
     current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)]
 ):
-    return current_user
+    nom = current_user.nom
+    prenom = current_user.prenom
+    pseudo = current_user.pseudo
+    return UtilisateurRenvoye(pseudo=pseudo, nom=nom, prenom=prenom)
 
 # Defi Routes
 @app.post('/defis/', response_model=DefiModele)
@@ -665,7 +668,60 @@ async def ajout_membre_classe(
         raise HTTPException(status_code=500, detail=f"Erreur lors de l'ajout de la réussite du défi : {str(e)}")
 
 
-@app.get('/membre_classe_par_groupe/{id_groupe}', response_model=List[UtilisateurModele])
+@app.get('/admins_par_groupe/', response_model=List[UtilisateurRenvoye])
+async def lire_admin_groupe(
+    id_groupe: int,
+    db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
+    skip: int = 0,  # Paramètre optionnel pour le décalage (pagination)
+    limit: int = 100  # Paramètre optionnel pour la limite du nombre de résultats
+):
+    try:
+        # Récupérer les utilisateurs du groupe qui sont des administrateurs
+        pseudo_admins = db.query(models.UtilisateurGroupe).filter(
+            (models.UtilisateurGroupe.id_groupe == id_groupe) & 
+            (models.UtilisateurGroupe.est_admin == True)
+        ).offset(skip).limit(limit).all()
+        
+        if not pseudo_admins:
+            raise HTTPException(status_code=404, detail=f"Aucun administrateur dans la classe : {id_groupe}")
+        
+        # Récupérer les informations des administrateurs
+        db_admins = db.query(models.Utilisateur).join(
+            models.UtilisateurGroupe, 
+            models.Utilisateur.pseudo == models.UtilisateurGroupe.pseudo_utilisateur
+        ).filter(
+            models.UtilisateurGroupe.id_groupe == id_groupe, 
+            models.UtilisateurGroupe.est_admin == True
+        ).offset(skip).limit(limit).all()
+        
+        if not db_admins:
+            raise HTTPException(status_code=404, detail="Aucune information trouvée pour les administrateurs")
+        
+        # Retourner les informations des administrateurs sous forme de liste d'objets UtilisateurRenvoye
+        infos_admins = [UtilisateurRenvoye(pseudo=admin.pseudo, nom=admin.nom, prenom=admin.prenom) for admin in db_admins]
+        
+        return infos_admins
+    
+    except HTTPException as e:
+        raise e
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des relations groupe-utilisateur : {str(e)}")
+
+def get_admin_count(
+    id_groupe: int,
+    db
+):
+    # Comptage des administrateurs dans le groupe sans pagination
+    total_admins = db.query(models.UtilisateurGroupe).filter(
+        (models.UtilisateurGroupe.id_groupe == id_groupe) & 
+        (models.UtilisateurGroupe.est_admin == True)
+    ).count()
+
+    # Retourner le nombre total d'administrateurs dans le groupe
+    return total_admins
+    
+@app.get('/membre_classe_par_groupe/{id_groupe}', response_model=List[UtilisateurRenvoye])
 async def lire_tous_les_membres_classe(
     id_groupe: int,
     db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
@@ -685,39 +741,18 @@ async def lire_tous_les_membres_classe(
         # Récupérer les informations des utilisateurs (modèle Utilisateur) en fonction des pseudos
         utilisateurs = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo.in_(pseudos_membres)).all()
 
+        # Convertir les utilisateurs en objets UtilisateurRenvoye
+        utilisateurs_renvoyes = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom) for user in utilisateurs]
+
+        return utilisateurs_renvoyes
+
         if not utilisateurs:
             raise HTTPException(status_code=404, detail="Aucun utilisateur trouvé pour ce groupe.")
 
         return utilisateurs
     
-    except Exception as e:
-        # Gestion des erreurs
-        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des relations groupe-utilisateur : {str(e)}")
-
-@app.get('/admins_groupe/{id_groupe}', response_model=List[UtilisateurModele])
-async def lire_tous_les_admins_classe(
-    id_groupe: int,
-    db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
-    skip: int = 0,  # Paramètre optionnel pour le décalage (pagination)
-    limit: int = 100  # Paramètre optionnel pour la limite du nombre de résultats
-):
-    try:
-        # Récupérer les relations entre groupes et utilisateurs pour un groupe spécifique
-        membres_classe = db.query(models.UtilisateurGroupe).filter(models.UtilisateurGroupe.id_groupe == id_groupe and models.UtilisateurGroupe.est_admin == True).offset(skip).limit(limit).all()
-
-        if not membres_classe:
-            raise HTTPException(status_code=404, detail="Aucun admin trouvé.")
-
-        # Extraire les pseudos des membres
-        pseudos_membres = [membre.pseudo_utilisateur for membre in membres_classe]
-
-        # Récupérer les informations des utilisateurs (modèle Utilisateur) en fonction des pseudos
-        utilisateurs = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo.in_(pseudos_membres)).all()
-
-        if not utilisateurs:
-            raise HTTPException(status_code=404, detail="Aucun utilisateur trouvé pour ce groupe.")
-
-        return utilisateurs
+    except HTTPException as e:
+        raise e
     
     except Exception as e:
         # Gestion des erreurs
@@ -760,18 +795,31 @@ async def supprimer_relation_utilisateur_groupe(
         
         # Vérifier si la relation existe
         if not relation:
-            raise HTTPException(status_code=404, detail="Relation utilisateur-groupe non trouvée.")
+            raise HTTPException(status_code=404, detail="L'utilisateur n'est pas membre de cette classe")
         
-        # Supprimer la relation
+        # Supprimer la relation utilisateur-groupe
         db.delete(relation)
-        db.commit()
+        db.commit()  # Commit après suppression de la relation
+        
+        # Vérifier le nombre d'administrateurs restants dans le groupe
+        admin_count = get_admin_count(id_groupe=id_groupe, db=db)
+        
+        if admin_count <= 0:
+            groupe = db.query(models.Groupe).filter(models.Groupe.id_groupe == id_groupe).first()
+            if groupe:
+                db.delete(groupe)  # Supprimer le groupe si plus d'administrateurs
+                db.commit()  # Commit après suppression du groupe
         
         # Retourner une réponse avec statut 200 OK
         return {"detail": "Relation supprimée avec succès."}
     
+    except HTTPException as e:
+        raise e  # Relever les exceptions HTTP comme 404
+
     except Exception as e:
-        # Gestion des erreurs
+        # Gestion des erreurs générales
         raise HTTPException(status_code=500, detail=f"Erreur lors de la suppression de la relation : {str(e)}")
+
     
 # Badges
 @app.post("/badges/", response_model=BadgeModele)
