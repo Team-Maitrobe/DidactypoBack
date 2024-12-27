@@ -54,6 +54,13 @@ class Badge(Base):
     titre_badge = Column(String(128), nullable=False)
     description_badge = Column(String(1024), nullable=False)
     image_badge = Column(String(128), nullable=False)
+
+class Exercice(Base):
+    __tablename__ = 'EXERCICE'
+
+    id_exercice = Column(Integer, primary_key=True, autoincrement=True)
+    description_exercice = Column(String)
+    #exercice_fait = Column(Boolean, default=False)  # Assurez-vous que cette colonne est présente
     
 # Tables de jointure
 

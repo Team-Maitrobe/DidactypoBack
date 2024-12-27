@@ -50,6 +50,16 @@ class BadgeModele(BadgeBase):
     class Config:
         from_attributes = True
 
+class ExerciceBase(BaseModel):
+    description_exercice: str
+    #exercice_fait: bool = False
+
+class ExerciceModele(ExerciceBase):
+    id_exercice: int
+
+    class Config:
+        orm_mode = True 
+
 class UtilisateurDefiBase(BaseModel):
     id_defi: int
     pseudo_utilisateur: str

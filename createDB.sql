@@ -49,6 +49,15 @@ CREATE TABLE DIDACTYPO.BADGES (
     PRIMARY KEY (id_badge),
 );
 
+
+CREATE TABLE DIDACTYPO.EXERCICE (
+    id_exercice INT NOT NULL AUTO_INCREMENT,
+    description_exercice VARCHAR(1024) NOT NULL,
+    exercice_fait BOOLEAN,
+
+    PRIMARY KEY (id_exercice)
+);
+
 -- Tables de jointure
 
 CREATE TABLE DIDACTYPO.GROUPE_UTILISATEUR (
