@@ -134,3 +134,12 @@ class UtilisateurBadgeBase(BaseModel):
 class UtilisateurBadgeModele(UtilisateurBadgeBase):
     class Config:
         orm_mode = True
+
+class ExerciceUtilisateurBase(BaseModel):
+    id_exercice: int
+    pseudo: str
+    exercice_fait: bool
+
+class ExerciceUtilisateurModele(ExerciceUtilisateurBase):
+    class Config:
+        orm_mode = True

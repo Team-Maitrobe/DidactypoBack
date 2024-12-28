@@ -15,6 +15,9 @@ class Utilisateur(Base):
     numCours = Column(Integer)
     tempsTotal = Column(Integer)
 
+    exercices_realises = relationship("ExerciceUtilisateur", back_populates="utilisateur")
+
+
 class Cours(Base):
     __tablename__ = 'COURS'
     id_cours = Column(Integer, primary_key=True, autoincrement=True)
@@ -61,6 +64,9 @@ class Exercice(Base):
     id_exercice = Column(Integer, primary_key=True, autoincrement=True)
     titre_exercice = Column(String)
     description_exercice = Column(String)
+
+    utilisateurs_ayant_realise = relationship("ExerciceUtilisateur", back_populates="exercice")
+
     
     
 # Tables de jointure
@@ -96,3 +102,14 @@ class GroupeCours(Base):
     __tablename__ = 'GROUPE_COURS'
     id_groupe = Column(Integer, ForeignKey('GROUPE.id_groupe'), primary_key=True)
     id_cours = Column(Integer, ForeignKey('COURS.id_cours'), primary_key=True)
+
+class ExerciceUtilisateur(Base):
+    __tablename__ = 'EXERCICE_UTILISATEUR'
+
+    id_exercice = Column(Integer, ForeignKey('EXERCICE.id_exercice'), primary_key=True)
+    pseudo = Column(String(15), ForeignKey('UTILISATEUR.pseudo'), primary_key=True)
+    exercice_fait = Column(Boolean, nullable=False, default=False)
+
+    # Relations facultatives pour naviguer
+    utilisateur = relationship("Utilisateur", back_populates="exercices_realises")
+    exercice = relationship("Exercice", back_populates="utilisateurs_ayant_realise")
