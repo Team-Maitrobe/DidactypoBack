@@ -52,8 +52,8 @@ CREATE TABLE DIDACTYPO.BADGES (
 
 CREATE TABLE DIDACTYPO.EXERCICE (
     id_exercice INT NOT NULL AUTO_INCREMENT,
+    titre_exercice VARCHAR(128) NOT NULL,
     description_exercice VARCHAR(1024) NOT NULL,
-    exercice_fait BOOLEAN,
 
     PRIMARY KEY (id_exercice)
 );

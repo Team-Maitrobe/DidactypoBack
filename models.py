@@ -59,8 +59,9 @@ class Exercice(Base):
     __tablename__ = 'EXERCICE'
 
     id_exercice = Column(Integer, primary_key=True, autoincrement=True)
+    titre_exercice = Column(String)
     description_exercice = Column(String)
-    #exercice_fait = Column(Boolean, default=False)  # Assurez-vous que cette colonne est présente
+    
     
 # Tables de jointure
 

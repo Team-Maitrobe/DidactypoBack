@@ -51,8 +51,9 @@ class BadgeModele(BadgeBase):
         from_attributes = True
 
 class ExerciceBase(BaseModel):
+    titre_exercice: str
     description_exercice: str
-    #exercice_fait: bool = False
+
 
 class ExerciceModele(ExerciceBase):
     id_exercice: int
