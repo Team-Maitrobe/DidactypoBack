@@ -31,7 +31,8 @@ from pydantic_models import (
     SousCoursBase, SousCoursModele,
     GroupeBase, GroupeModele,
     UtilisateurGroupeBase, UtilisateurGroupeModele,
-    UtilisateurBadgeModele,
+    UtilisateurBadgeModele, ExerciceBase, ExerciceModele,
+    ExerciceUtilisateurBase, ExerciceUtilisateurModele,
 )
 
 app = FastAPI()
@@ -68,6 +69,8 @@ models.Base.metadata.create_all(bind=engine)
 @app.on_event("startup")
 async def on_startup():
     sql_file_path = Path(__file__).parent / "cours.sql"
+    exercices_sql_file_path = Path(__file__).parent / "exercices.sql"
+
 
     db = SessionLocal()
     try:
@@ -77,6 +80,13 @@ async def on_startup():
             print("La base de donnée a été initialisée avec les données existantes")
         else:
             print("La base de donnée est déjà initialisée")
+
+        # Vérifie et initialise les données pour les exercices
+        if not is_initialized(db, models.Exercice):
+            execute_sql_file(exercices_sql_file_path)
+            print("La base de données a été initialisée avec les données des exercices.")
+        else:
+            print("Les données des exercices sont déjà initialisées.")
     finally:
         db.close()
 
@@ -875,3 +885,150 @@ async def lire_ses_badges(
     badges = [db.query(models.Badge).filter(models.Badge.id_badge == badge.id_badge).first() for badge in infos_badges]
     badges = [badge for badge in badges if badge is not None]  # Enlever les valeurs None
     return badges
+
+# Créer un exercice
+@app.post('/exercices/', response_model=ExerciceModele)
+async def creer_exercice(exercice: ExerciceBase, db: Session = Depends(get_db)):
+    try:
+        db_exercice = models.Exercice(**exercice.dict())
+        db.add(db_exercice)
+        db.commit()
+        db.refresh(db_exercice)
+        return db_exercice
+    except Exception as e:
+        db.rollback()  # Rollback la transaction en cas d'erreur
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la création de l'exercice: {str(e)}")
+
+# Lire tous les exercices
+@app.get('/exercices/', response_model=List[ExerciceModele])
+async def lire_exercices(db: Session = Depends(get_db), skip: int = 0, limit: int = 100):
+    try:
+        exercices = db.query(models.Exercice).offset(skip).limit(limit).all()
+        if not exercices:
+            raise HTTPException(status_code=404, detail="Aucun exercice trouvé")
+        return exercices
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des exercices: {str(e)}")
+
+# Lire un exercice par ID
+@app.get('/exercices/{id_exercice}', response_model=ExerciceModele)
+async def lire_exercice_par_id(id_exercice: int, db: Session = Depends(get_db)):
+    try:
+        exercice = db.query(models.Exercice).filter(models.Exercice.id_exercice == id_exercice).first()
+        if not exercice:
+            raise HTTPException(status_code=404, detail="Exercice non trouvé")
+        return exercice
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération de l'exercice: {str(e)}")
+
+# Supprimer un exercice
+@app.delete('/exercices/{id_exercice}', response_model=dict)
+async def supprimer_exercice(id_exercice: int, db: Session = Depends(get_db)):
+    try:
+        exercice = db.query(models.Exercice).filter(models.Exercice.id_exercice == id_exercice).first()
+        if not exercice:
+            raise HTTPException(status_code=404, detail="Exercice non trouvé")
+        
+        db.delete(exercice)
+        db.commit()
+        return {"message": f"Exercice avec l'ID '{id_exercice}' supprimé avec succès."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la suppression de l'exercice: {str(e)}")
+    
+
+@app.post('/exercices_realises/', response_model=ExerciceUtilisateurModele)
+async def ajouter_exercice_realise(
+    id_exercice: int,  # ID de l'exercice
+    pseudo: str,  # Pseudo de l'utilisateur
+    db: Session = Depends(get_db)  # Session de base de données
+):
+    try:
+        # Vérifier si l'utilisateur existe
+        db_utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
+        if not db_utilisateur:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        
+        # Vérifier si l'exercice existe
+        db_exercice = db.query(models.Exercice).filter(models.Exercice.id_exercice == id_exercice).first()
+        if not db_exercice:
+            raise HTTPException(status_code=404, detail="Exercice non trouvé")
+
+        # Vérifier si l'association existe déjà
+        relation_existante = db.query(models.ExerciceUtilisateur).filter(
+            models.ExerciceUtilisateur.id_exercice == id_exercice,
+            models.ExerciceUtilisateur.pseudo == pseudo
+        ).first()
+        if relation_existante:
+            raise HTTPException(status_code=400, detail="L'exercice est déjà marqué pour cet utilisateur")
+
+        # Ajouter l'association
+        exercice_realise = models.ExerciceUtilisateur(
+            id_exercice=id_exercice,
+            pseudo=pseudo,
+            exercice_fait=True  # Marquer comme réalisé
+        )
+        db.add(exercice_realise)
+        db.commit()
+        db.refresh(exercice_realise)
+        return exercice_realise
+    
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erreur : {str(e)}")
+
+
+@app.get('/exercices_realises/{pseudo}', response_model=List[ExerciceUtilisateurModele])
+async def lire_exercices_realises(
+    pseudo: str,  # Pseudo de l'utilisateur
+    db: Session = Depends(get_db),  # Session de base de données
+    skip: int = 0,  # Pagination : décalage
+    limit: int = 100  # Pagination : limite
+):
+    try:
+        # Vérifier si l'utilisateur existe
+        db_utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
+        if not db_utilisateur:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+
+        # Récupérer les exercices réalisés
+        exercices = db.query(models.ExerciceUtilisateur).filter(
+            models.ExerciceUtilisateur.pseudo == pseudo,
+            models.ExerciceUtilisateur.exercice_fait == True
+        ).offset(skip).limit(limit).all()
+
+        if not exercices:
+            raise HTTPException(status_code=404, detail="Aucun exercice réalisé trouvé pour cet utilisateur")
+        
+        return exercices
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur : {str(e)}")
+
+
+@app.delete('/exercices_realises/', response_model=dict)
+async def supprimer_exercice_realise(
+    id_exercice: int,  # ID de l'exercice
+    pseudo: str,  # Pseudo de l'utilisateur
+    db: Session = Depends(get_db)  # Session de base de données
+):
+    try:
+        # Vérifier si la relation existe
+        relation = db.query(models.ExerciceUtilisateur).filter(
+            models.ExerciceUtilisateur.id_exercice == id_exercice,
+            models.ExerciceUtilisateur.pseudo == pseudo
+        ).first()
+        
+        if not relation:
+            raise HTTPException(status_code=404, detail="Exercice non trouvé pour cet utilisateur")
+
+        # Supprimer la relation
+        db.delete(relation)
+        db.commit()
+
+        return {"message": f"L'exercice avec ID {id_exercice} pour l'utilisateur '{pseudo}' a été supprimé avec succès."}
+    
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erreur : {str(e)}")
+
