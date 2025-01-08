@@ -132,31 +132,6 @@ async def supprimer_utilisateur(pseudo: str, db: Session = Depends(get_db)):
     db.commit()
     return {"message": f"Utilisateur '{pseudo}' supprimé avec succès."}
 
-#Utilisateur stats
-# @app.patch('/stats/temps', response_model=UtilisateurBase)
-# async def ajouter_stats_temps_defi(pseudo: str = Query(...), temps: float = Query(...), db: Session = Depends(get_db)):
-#     utilisateur = get_utilisateur(db, pseudo)
-
-#     if not utilisateur:
-#         raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-    
-#     utilisateur.tempsTotal += temps
-#     db.commit()  # Commit the changes to the database
-#     return utilisateur  # Return the updated user object
-        
-@app.get('/stats/{pseudo}', response_model=StatsUtilisateur)
-async def lire_stats_utilisateur(pseudo: str, db: Session = Depends(get_db)):
-    utilisateur = get_utilisateur(db, pseudo)
-    
-    if not utilisateur:
-        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-    
-    # Prepare the data for the response
-    return StatsUtilisateur(
-        moyMotsParMinute=str(utilisateur.moyMotsParMinute or 0),
-        numCours=str(utilisateur.numCours or 0),
-        tempsTotal=str(utilisateur.tempsTotal or 0)
-    )
 
 # Define password hash verification
 def verifier_mdp(plain_password, mot_de_passe):
@@ -1032,3 +1007,26 @@ async def supprimer_exercice_realise(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erreur : {str(e)}")
 
+@app.post('/stat/', response_model=StatsUtilisateur)
+async def ajouter_stat(
+    stat: StatsUtilisateur,
+    db: Session = Depends(get_db)
+):
+    try:
+        utilisateur_db = get_utilisateur(db, stat.pseudo_utilisateur)
+
+        if not utilisateur_db:
+            raise HTTPException(status_code=404, detail="Aucun utilisateur trouvé")
+
+        db_stat = models.Stat(**stat.dict())
+        db.add(db_stat)
+        db.commit()
+        db.refresh(db_stat)
+        return db_stat
+    
+    except HTTPException as e:
+        raise e
+    
+    except Exception as e:
+        db.rollback()  # Rollback the transaction if an error occurs
+        raise HTTPException(status_code=500, detail=f"Erreur lors de l'ajout de la stat : {str(e)}")

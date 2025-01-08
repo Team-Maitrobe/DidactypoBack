@@ -25,9 +25,11 @@ class UtilisateurRenvoye(BaseModel):
 
 #Utilisé uniquement pour afficher les statistiques d'un utilisateur
 class StatsUtilisateur(BaseModel):
-    moyMotsParMinute: str
-    numCours: str
-    tempsTotal: str
+    id_stat: int
+    type_stat: str
+    valeur_stat: float
+    date_stat: int
+    pseudo_utilisateur: str
 
 class DefiBase(BaseModel):
     titre_defi: str
