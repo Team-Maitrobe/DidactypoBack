@@ -5,6 +5,7 @@ from datetime import datetime
 
 class Utilisateur(Base):
     __tablename__ = 'UTILISATEUR'
+
     pseudo = Column(String(15), primary_key=True, nullable=False)
     mot_de_passe = Column(String(255), nullable=False)
     nom = Column(String(64))
@@ -15,7 +16,16 @@ class Utilisateur(Base):
     numCours = Column(Integer)
     tempsTotal = Column(Integer)
 
+    # Relation avec ExerciceUtilisateur
     exercices_realises = relationship("ExerciceUtilisateur", back_populates="utilisateur")
+
+    # Relation avec Stat
+    # Suppression en cascade des statistiques liées
+    stat_concerne = relationship(
+        "Stat", 
+        back_populates="utilisateur_concerne", 
+        cascade="all, delete-orphan"
+    )
 
 
 class Cours(Base):
@@ -67,7 +77,17 @@ class Exercice(Base):
 
     utilisateurs_ayant_realise = relationship("ExerciceUtilisateur", back_populates="exercice")
 
-    
+class Stat(Base):
+    __tablename__ = 'STATS'
+
+    id_stat = Column(Integer, primary_key=True, autoincrement=True)
+    type_stat = Column(String(10), nullable=False)
+    valeur_stat = Column(Float, nullable=False)
+    date_stat = Column(Integer, nullable=False)
+    pseudo_utilisateur = Column(String(15), ForeignKey('UTILISATEUR.pseudo'), nullable=False)
+
+    # Relation avec Utilisateur
+    utilisateur_concerne = relationship("Utilisateur", back_populates="stat_concerne")
     
 # Tables de jointure
 
