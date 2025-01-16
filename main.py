@@ -6,15 +6,14 @@ from typing import Annotated, List
 
 # Imports tiers
 import jwt
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func
 from fastapi import FastAPI, HTTPException, Depends, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jwt.exceptions import InvalidTokenError
-from pydantic import BaseModel
+import time
+
 
 # Imports internes
 from database import SessionLocal, engine, execute_sql_file, is_initialized
@@ -977,6 +976,9 @@ async def lire_exercices_realises(
         
         return exercices
     
+    except HTTPException as e:
+        raise e
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur : {str(e)}")
 
@@ -1003,22 +1005,33 @@ async def supprimer_exercice_realise(
 
         return {"message": f"L'exercice avec ID {id_exercice} pour l'utilisateur '{pseudo}' a été supprimé avec succès."}
     
+    except HTTPException as e:
+        raise e
+    
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erreur : {str(e)}")
 
 @app.post('/stat/', response_model=StatsUtilisateur)
 async def ajouter_stat(
-    stat: StatsUtilisateur,
+    pseudo_utilisateur: str,
+    type_stat: str,
+    valeur_stat: float,
     db: Session = Depends(get_db)
 ):
     try:
-        utilisateur_db = get_utilisateur(db, stat.pseudo_utilisateur)
+        db_stat = models.Stat(
+            pseudo_utilisateur=pseudo_utilisateur,
+            type_stat=type_stat,
+            valeur_stat=valeur_stat,
+            date_stat=int(time.time())
+        )
+        
+        utilisateur_db = get_utilisateur(db, db_stat.pseudo_utilisateur)
 
         if not utilisateur_db:
             raise HTTPException(status_code=404, detail="Aucun utilisateur trouvé")
 
-        db_stat = models.Stat(**stat.dict())
         db.add(db_stat)
         db.commit()
         db.refresh(db_stat)
@@ -1030,3 +1043,14 @@ async def ajouter_stat(
     except Exception as e:
         db.rollback()  # Rollback the transaction if an error occurs
         raise HTTPException(status_code=500, detail=f"Erreur lors de l'ajout de la stat : {str(e)}")
+    
+@app.get('/stat/', response_model=List[StatsUtilisateur])
+async def lire_stats_utilisateur(
+    pseudo_utilisateur: str,
+    type_stat: str,
+    db: Session = Depends(get_db),
+    skip: int = 0,
+    limit: int = 200
+):
+    stats = db.query(models.Stat).filter(models.Stat.pseudo_utilisateur == pseudo_utilisateur, models.Stat.type_stat == type_stat).offset(skip).limit(limit).all()
+    return stats

@@ -81,7 +81,7 @@ class Stat(Base):
     __tablename__ = 'STATS'
 
     id_stat = Column(Integer, primary_key=True, autoincrement=True)
-    type_stat = Column(String(10), nullable=False)
+    type_stat = Column(String(10), nullable=False) # Type de statistique (tempsdefi, nberreur, precision, courfini, exofini)
     valeur_stat = Column(Float, nullable=False)
     date_stat = Column(Integer, nullable=False)
     pseudo_utilisateur = Column(String(15), ForeignKey('UTILISATEUR.pseudo'), nullable=False)
