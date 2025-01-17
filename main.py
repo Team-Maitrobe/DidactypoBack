@@ -191,6 +191,35 @@ async def mettre_a_jour_cpt_defi(
 
 
 
+@app.patch("/modification_mdp")
+async def modifier_mdp(
+    pseudo: str,
+    ancien_mdp: str,
+    new_mdp: str,
+    db: Session = Depends(get_db)
+):
+    # Vérification de la présence de l'utilisateur
+    db_utilisateur = get_utilisateur(db, pseudo)
+    if not db_utilisateur:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+    
+    # Vérification de l'ancien mot de passe
+    if not (verifier_mdp(ancien_mdp,db_utilisateur.mot_de_passe)):
+        raise HTTPException(status_code=401, detail="L'ancien mot de passe est incorrect")
+
+    # Vérification du nouveau mot de passe
+    if not new_mdp.strip():
+        raise HTTPException(status_code=400, detail="Le nouveau mot de passe ne peut pas être vide")
+    
+    try:
+        # Mise à jour du mot de passe
+        db_utilisateur.mot_de_passe = get_mdp_hashe(new_mdp)
+        db.commit()
+        return {"message": f"Mot de passe de l'utilisateur '{pseudo}' modifié avec succès."}
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Erreur interne, veuillez réessayer plus tard.")
+
 # Define password hash verification
 def verifier_mdp(plain_password, mot_de_passe):
     return pwd_context.verify(plain_password, mot_de_passe)
