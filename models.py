@@ -12,10 +12,9 @@ class Utilisateur(Base):
     prenom = Column(String(64))
     courriel = Column(String(128))
     est_admin = Column(Boolean, nullable=False, default=False)
-    moyMotsParMinute = Column(Integer, default=0)
     numCours = Column(Integer)
     tempsTotal = Column(Integer)
-
+    cptDefi = Column(Integer, default=0)
     # Relation avec ExerciceUtilisateur
     exercices_realises = relationship("ExerciceUtilisateur", back_populates="utilisateur")
 
@@ -31,7 +30,7 @@ class Utilisateur(Base):
 class Cours(Base):
     __tablename__ = 'COURS'
     id_cours = Column(Integer, primary_key=True, autoincrement=True)
-    titre_cours = Column(String(128), nullable=False)
+    titre_cours = Column(String(128), nullable=True)
     description_cours = Column(String(1024), nullable=False)
     duree_cours = Column(Integer, nullable=False)
     difficulte_cours = Column(Integer, nullable=False)

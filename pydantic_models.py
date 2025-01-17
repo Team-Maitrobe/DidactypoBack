@@ -10,9 +10,9 @@ class UtilisateurBase(BaseModel):
     prenom: str
     courriel: str
     est_admin: bool
-    moyMotsParMinute: int
     numCours: int
     tempsTotal: int
+    cptDefi: int
 
 class UtilisateurModele(UtilisateurBase):
     class Config:
@@ -22,6 +22,10 @@ class UtilisateurRenvoye(BaseModel):
     pseudo: str
     nom: str
     prenom: str
+    cptDefi: int
+
+class UpdateCptDefiRequest(BaseModel):
+    cptDefi: int
 
 #Utilisé uniquement pour afficher les statistiques d'un utilisateur
 class StatsUtilisateur(BaseModel):

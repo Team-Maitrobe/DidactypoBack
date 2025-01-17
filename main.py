@@ -31,7 +31,7 @@ from pydantic_models import (
     GroupeBase, GroupeModele,
     UtilisateurGroupeBase, UtilisateurGroupeModele,
     UtilisateurBadgeModele, ExerciceBase, ExerciceModele,
-    ExerciceUtilisateurBase, ExerciceUtilisateurModele,
+    ExerciceUtilisateurBase, ExerciceUtilisateurModele,UpdateCptDefiRequest,
 )
 
 app = FastAPI()
@@ -69,6 +69,7 @@ models.Base.metadata.create_all(bind=engine)
 async def on_startup():
     sql_file_path = Path(__file__).parent / "cours.sql"
     exercices_sql_file_path = Path(__file__).parent / "exercices.sql"
+    badges_sql_file_path = Path(__file__).parent / "badges.sql"
 
 
     db = SessionLocal()
@@ -86,6 +87,13 @@ async def on_startup():
             print("La base de données a été initialisée avec les données des exercices.")
         else:
             print("Les données des exercices sont déjà initialisées.")
+        
+        # Vérifie et initialise les données pour les badges
+        if not is_initialized(db, models.Badge):
+            execute_sql_file(badges_sql_file_path)
+            print("La base de données a été initialisée avec les données des badges.")
+        else:
+            print("Les données des exercices sont déjà initialisées.")
     finally:
         db.close()
 
@@ -101,7 +109,17 @@ def get_utilisateur(db, pseudo: str):
 async def creer_utilisateur(utilisateur: UtilisateurBase, db: Session = Depends(get_db)):
     try:
         utilisateur.mot_de_passe = get_mdp_hashe(utilisateur.mot_de_passe)
-        db_utilisateur = models.Utilisateur(**utilisateur.dict())
+        db_utilisateur = models.Utilisateur(
+            pseudo=utilisateur.pseudo,
+            mot_de_passe=utilisateur.mot_de_passe,
+            nom=utilisateur.nom,
+            prenom=utilisateur.prenom,
+            courriel=utilisateur.courriel,
+            est_admin=utilisateur.est_admin,
+            numCours=utilisateur.numCours,
+            tempsTotal=utilisateur.tempsTotal,
+            cptDefi=0  # Valeur par défaut pour cptDefi
+            )
         db.add(db_utilisateur)
         db.commit()
         db.refresh(db_utilisateur)
@@ -116,7 +134,7 @@ async def lire_utilisateurs(db: Session = Depends(get_db), skip: int = 0, limit:
         utilisateurs = db.query(models.Utilisateur).offset(skip).limit(limit).all()
         if not utilisateurs:
             raise HTTPException(status_code=404, detail="No users found")
-        valUtilisateurs = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom) for user in utilisateurs]
+        valUtilisateurs = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom, cptDefi=user.cptDefi) for user in utilisateurs]
         return valUtilisateurs
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching users: {str(e)}")
@@ -130,6 +148,39 @@ async def supprimer_utilisateur(pseudo: str, db: Session = Depends(get_db)):
     db.delete(db_utilisateur)
     db.commit()
     return {"message": f"Utilisateur '{pseudo}' supprimé avec succès."}
+
+@app.get('/utilisateurs/{pseudo}', response_model=UtilisateurModele)
+async def lire_utilisateur(pseudo: str, db: Session = Depends(get_db)):
+    try:
+        utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
+        if not utilisateur:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        return utilisateur
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération de l'utilisateur : {str(e)}")
+
+
+@app.put('/utilisateurs/{pseudo}/cptDefi', response_model=UtilisateurModele)
+async def mettre_a_jour_cpt_defi(
+    pseudo: str,
+    update_request: UpdateCptDefiRequest,  # Validation avec Pydantic
+    db: Session = Depends(get_db)  # Injection de la session DB
+):
+    try:
+        # Rechercher l'utilisateur dans la base de données
+        utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
+        if not utilisateur:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+
+        # Mettre à jour le champ `cptDefi`
+        utilisateur.cptDefi = update_request.cptDefi
+        db.commit()
+        db.refresh(utilisateur)  # Recharger les données mises à jour depuis la DB
+        return utilisateur
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour de cptDefi : {str(e)}")
+
+
 
 
 # Define password hash verification
@@ -224,7 +275,7 @@ async def ajouter_defi(defi: DefiBase, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Erreur lors de l'ajout du défi : {str(e)}")
 
 @app.get('/defis/', response_model=List[DefiModele])
-async def lire_defis(db: Session = Depends(get_db), skip: int = 0, limit: int = 100):
+async def lire_defis(db: Session = Depends(get_db), skip: int = 0, limit: int = 1000):
     defis = db.query(models.Defi).offset(skip).limit(limit).all()
     return defis
 
@@ -825,25 +876,60 @@ async def add_badge(badge_data: BadgeBase, db: Session = Depends(get_db)):
     
     return new_badge
 
-@app.post("/gain_badge", response_model=UtilisateurBadgeModele)
-async def ajout_gain_badge(
-    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
-    id_badge: int,
-    db: Session = Depends(get_db)):
-    new_gain = models.UtilisateurBadge(
-        pseudo_utilisateur = current_user.pseudo,
-        id_badge=id_badge
-    )
+@app.post("/gain_badge")
+async def ajout_gain_badge(pseudo_utilisateur: str, id_badge: int, db: Session = Depends(get_db)):
+    # Vérifier si l'utilisateur a déjà ce badge
+    utilisateur_badge = db.query(models.UtilisateurBadge).filter(
+        models.UtilisateurBadge.pseudo_utilisateur == pseudo_utilisateur,
+        models.UtilisateurBadge.id_badge == id_badge
+    ).first()
+
+    if utilisateur_badge:
+        # Si l'utilisateur a déjà ce badge
+        raise HTTPException(status_code=400, detail="L'utilisateur possède déjà ce badge.")
     
     try:
+        # Ajouter un nouveau badge pour l'utilisateur
+        new_gain = models.UtilisateurBadge(
+            pseudo_utilisateur=pseudo_utilisateur,
+            id_badge=id_badge
+        )
         db.add(new_gain)
         db.commit()
         db.refresh(new_gain)
     except Exception as e:
-        db.rollback()  # Rollback en cas d'erreur
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Erreur pendant l'ajout du gain de badge: {str(e)}")
-    
-    return new_gain
+
+    return {"message": "Badge ajouté avec succès", "badge": new_gain}
+
+
+@app.delete("/gain_badge/{pseudo_utilisateur}")
+async def supprimer_tous_les_badges(
+    pseudo_utilisateur: str,
+    db: Session = Depends(get_db)
+):
+    # Vérifier si l'utilisateur a des badges
+    gains = db.query(models.UtilisateurBadge).filter(
+        models.UtilisateurBadge.pseudo_utilisateur == pseudo_utilisateur
+    ).all()
+
+    if not gains:
+        raise HTTPException(status_code=404, detail="Aucun badge trouvé pour cet utilisateur.")
+
+    # Supprimer tous les badges de l'utilisateur
+    try:
+        db.query(models.UtilisateurBadge).filter(
+            models.UtilisateurBadge.pseudo_utilisateur == pseudo_utilisateur
+        ).delete()
+
+        db.commit()
+    except Exception as e:
+        db.rollback()  # Rollback en cas d'erreur
+        raise HTTPException(status_code=500, detail=f"Erreur pendant la suppression des badges: {str(e)}")
+
+    return {"message": "Tous les badges ont été supprimés avec succès."}  # Retour d'un message de succès
+
 
 @app.get("/badge/{pseudo}", response_model=List[BadgeModele])
 async def lire_ses_badges(

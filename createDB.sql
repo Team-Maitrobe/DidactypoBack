@@ -7,11 +7,11 @@ CREATE TABLE DIDACTYPO.UTILISATEUR (
     prenom VARCHAR(64),
     courriel VARCHAR(128),
     est_admin BOOLEAN NOT NULL DEFAULT FALSE,
-    moyMotsParMinute INT DEFAULT 0,
     numCours INT,
     tempsTotal INT,
+    cptDefi INT DEFAULT 0,
 
-    PRIMARY KEY (pseudo)
+    PRIMARY KEY (pseudo),
 );
 
 CREATE TABLE DIDACTYPO.COURS (
