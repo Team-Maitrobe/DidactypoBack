@@ -70,6 +70,7 @@ async def on_startup():
     sql_file_path = Path(__file__).parent / "cours.sql"
     exercices_sql_file_path = Path(__file__).parent / "exercices.sql"
     badges_sql_file_path = Path(__file__).parent / "badges.sql"
+    defi_sql_file_path = Path(__file__).parent / "defi.sql"
 
 
     db = SessionLocal()
@@ -92,6 +93,13 @@ async def on_startup():
         if not is_initialized(db, models.Badge):
             execute_sql_file(badges_sql_file_path)
             print("La base de données a été initialisée avec les données des badges.")
+        else:
+            print("Les données des exercices sont déjà initialisées.")
+
+        # Vérifie et initialise les données pour les defis
+        if not is_initialized(db, models.Defi):
+            execute_sql_file(defi_sql_file_path)
+            print("La base de données a été initialisée avec les données des defi.")
         else:
             print("Les données des exercices sont déjà initialisées.")
     finally:
