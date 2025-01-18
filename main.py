@@ -954,6 +954,20 @@ async def lire_ses_badges(
     badges = [badge for badge in badges if badge is not None]  # Enlever les valeurs None
     return badges
 
+@app.get("/badge_manquant/{id_badge}", response_model=BadgeModele)
+async def recuperer_badge_par_id(
+    id_badge: int,
+    db: Session = Depends(get_db)
+):
+    # Rechercher le badge avec l'id donné
+    badge = db.query(models.Badge).filter(models.Badge.id_badge == id_badge).first()
+    
+    if not badge:
+        raise HTTPException(status_code=404, detail="Badge introuvable.")
+    
+    return badge
+   
+
 # Créer un exercice
 @app.post('/exercices/', response_model=ExerciceModele)
 async def creer_exercice(exercice: ExerciceBase, db: Session = Depends(get_db)):
