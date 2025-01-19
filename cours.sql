@@ -45,7 +45,7 @@ INSERT INTO SOUSCOURS (id_cours_parent, id_sous_cours, titre_sous_cours, contenu
 (2,9,'L''annulaire droit','L''annulaire droit s''occupe des touches o, l, 0 et du /.','https://i.postimg.cc/4NNWGfp0/Azerty-keyboard.jpg');
 INSERT INTO SOUSCOURS (id_cours_parent, id_sous_cours, titre_sous_cours, contenu_cours, chemin_img_sous_cours) VALUES
 (2,10,'Le petit doigt droit','Le petit doigt droit, le doigt le plus difficile. Il s''occupe des touches p, m et de toutes les touches restantes à droite. Cela fait beaucoup, mais c''est possible. Alors, il faut s''entraîner beaucoup sur ce doigt.','https://i.postimg.cc/4NNWGfp0/Azerty-keyboard.jpg');
-INSERT INTO SOUSCOURS (id_cours_parent, id_sous_cours, titre_sous_cours, contenu_cours, chemin_img_sous_cours) VALUES
+INSERT INTO SOUSCOURS (id_cours_parent, id_sous_cours, contenu_cours) VALUES
 (2,11,'Bon travail, je sais que c''était long, mais tu peux vraiment être fier de ton travail !
 Mais malheureusement, le vrai travail commence à partir de maintenant. La dactylographie est majoritairement de la pratique. Dans les cours qui suivent, je vais t''accompagner dans cette aventure pour maîtriser la dactylographie.');
 INSERT INTO SOUSCOURS (id_cours_parent, id_sous_cours, titre_sous_cours, contenu_cours) VALUES

@@ -5,23 +5,32 @@ from datetime import datetime
 
 class Utilisateur(Base):
     __tablename__ = 'UTILISATEUR'
+
     pseudo = Column(String(15), primary_key=True, nullable=False)
     mot_de_passe = Column(String(255), nullable=False)
     nom = Column(String(64))
     prenom = Column(String(64))
     courriel = Column(String(128))
     est_admin = Column(Boolean, nullable=False, default=False)
-    moyMotsParMinute = Column(Integer, default=0)
     numCours = Column(Integer)
     tempsTotal = Column(Integer)
-
+    cptDefi = Column(Integer, default=0)
+    # Relation avec ExerciceUtilisateur
     exercices_realises = relationship("ExerciceUtilisateur", back_populates="utilisateur")
+
+    # Relation avec Stat
+    # Suppression en cascade des statistiques liées
+    stat_concerne = relationship(
+        "Stat", 
+        back_populates="utilisateur_concerne", 
+        cascade="all, delete-orphan"
+    )
 
 
 class Cours(Base):
     __tablename__ = 'COURS'
     id_cours = Column(Integer, primary_key=True, autoincrement=True)
-    titre_cours = Column(String(128), nullable=False)
+    titre_cours = Column(String(128), nullable=True)
     description_cours = Column(String(1024), nullable=False)
     duree_cours = Column(Integer, nullable=False)
     difficulte_cours = Column(Integer, nullable=False)
@@ -67,7 +76,17 @@ class Exercice(Base):
 
     utilisateurs_ayant_realise = relationship("ExerciceUtilisateur", back_populates="exercice")
 
-    
+class Stat(Base):
+    __tablename__ = 'STATS'
+
+    id_stat = Column(Integer, primary_key=True, autoincrement=True)
+    type_stat = Column(String(10), nullable=False) # Type de statistique (tempsdefi, nberreur, precision, courfini, exofini)
+    valeur_stat = Column(Float, nullable=False)
+    date_stat = Column(Integer, nullable=False)
+    pseudo_utilisateur = Column(String(15), ForeignKey('UTILISATEUR.pseudo'), nullable=False)
+
+    # Relation avec Utilisateur
+    utilisateur_concerne = relationship("Utilisateur", back_populates="stat_concerne")
     
 # Tables de jointure
 

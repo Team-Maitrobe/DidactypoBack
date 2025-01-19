@@ -6,15 +6,14 @@ from typing import Annotated, List
 
 # Imports tiers
 import jwt
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func
 from fastapi import FastAPI, HTTPException, Depends, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jwt.exceptions import InvalidTokenError
-from pydantic import BaseModel
+import time
+
 
 # Imports internes
 from database import SessionLocal, engine, execute_sql_file, is_initialized
@@ -32,7 +31,7 @@ from pydantic_models import (
     GroupeBase, GroupeModele,
     UtilisateurGroupeBase, UtilisateurGroupeModele,
     UtilisateurBadgeModele, ExerciceBase, ExerciceModele,
-    ExerciceUtilisateurBase, ExerciceUtilisateurModele,
+    ExerciceUtilisateurBase, ExerciceUtilisateurModele,UpdateCptDefiRequest,
 )
 
 app = FastAPI()
@@ -70,6 +69,8 @@ models.Base.metadata.create_all(bind=engine)
 async def on_startup():
     sql_file_path = Path(__file__).parent / "cours.sql"
     exercices_sql_file_path = Path(__file__).parent / "exercices.sql"
+    badges_sql_file_path = Path(__file__).parent / "badges.sql"
+    defi_sql_file_path = Path(__file__).parent / "defi.sql"
 
 
     db = SessionLocal()
@@ -87,6 +88,20 @@ async def on_startup():
             print("La base de données a été initialisée avec les données des exercices.")
         else:
             print("Les données des exercices sont déjà initialisées.")
+        
+        # Vérifie et initialise les données pour les badges
+        if not is_initialized(db, models.Badge):
+            execute_sql_file(badges_sql_file_path)
+            print("La base de données a été initialisée avec les données des badges.")
+        else:
+            print("Les données des exercices sont déjà initialisées.")
+
+        # Vérifie et initialise les données pour les defis
+        if not is_initialized(db, models.Defi):
+            execute_sql_file(defi_sql_file_path)
+            print("La base de données a été initialisée avec les données des defi.")
+        else:
+            print("Les données des exercices sont déjà initialisées.")
     finally:
         db.close()
 
@@ -102,7 +117,17 @@ def get_utilisateur(db, pseudo: str):
 async def creer_utilisateur(utilisateur: UtilisateurBase, db: Session = Depends(get_db)):
     try:
         utilisateur.mot_de_passe = get_mdp_hashe(utilisateur.mot_de_passe)
-        db_utilisateur = models.Utilisateur(**utilisateur.dict())
+        db_utilisateur = models.Utilisateur(
+            pseudo=utilisateur.pseudo,
+            mot_de_passe=utilisateur.mot_de_passe,
+            nom=utilisateur.nom,
+            prenom=utilisateur.prenom,
+            courriel=utilisateur.courriel,
+            est_admin=utilisateur.est_admin,
+            numCours=utilisateur.numCours,
+            tempsTotal=utilisateur.tempsTotal,
+            cptDefi=0  # Valeur par défaut pour cptDefi
+            )
         db.add(db_utilisateur)
         db.commit()
         db.refresh(db_utilisateur)
@@ -117,7 +142,7 @@ async def lire_utilisateurs(db: Session = Depends(get_db), skip: int = 0, limit:
         utilisateurs = db.query(models.Utilisateur).offset(skip).limit(limit).all()
         if not utilisateurs:
             raise HTTPException(status_code=404, detail="No users found")
-        valUtilisateurs = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom) for user in utilisateurs]
+        valUtilisateurs = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom, cptDefi=user.cptDefi) for user in utilisateurs]
         return valUtilisateurs
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching users: {str(e)}")
@@ -132,31 +157,39 @@ async def supprimer_utilisateur(pseudo: str, db: Session = Depends(get_db)):
     db.commit()
     return {"message": f"Utilisateur '{pseudo}' supprimé avec succès."}
 
-#Utilisateur stats
-# @app.patch('/stats/temps', response_model=UtilisateurBase)
-# async def ajouter_stats_temps_defi(pseudo: str = Query(...), temps: float = Query(...), db: Session = Depends(get_db)):
-#     utilisateur = get_utilisateur(db, pseudo)
+@app.get('/utilisateurs/{pseudo}', response_model=UtilisateurModele)
+async def lire_utilisateur(pseudo: str, db: Session = Depends(get_db)):
+    try:
+        utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
+        if not utilisateur:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        return utilisateur
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération de l'utilisateur : {str(e)}")
 
-#     if not utilisateur:
-#         raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-    
-#     utilisateur.tempsTotal += temps
-#     db.commit()  # Commit the changes to the database
-#     return utilisateur  # Return the updated user object
-        
-@app.get('/stats/{pseudo}', response_model=StatsUtilisateur)
-async def lire_stats_utilisateur(pseudo: str, db: Session = Depends(get_db)):
-    utilisateur = get_utilisateur(db, pseudo)
-    
-    if not utilisateur:
-        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-    
-    # Prepare the data for the response
-    return StatsUtilisateur(
-        moyMotsParMinute=str(utilisateur.moyMotsParMinute or 0),
-        numCours=str(utilisateur.numCours or 0),
-        tempsTotal=str(utilisateur.tempsTotal or 0)
-    )
+
+@app.put('/utilisateurs/{pseudo}/cptDefi', response_model=UtilisateurModele)
+async def mettre_a_jour_cpt_defi(
+    pseudo: str,
+    update_request: UpdateCptDefiRequest,  # Validation avec Pydantic
+    db: Session = Depends(get_db)  # Injection de la session DB
+):
+    try:
+        # Rechercher l'utilisateur dans la base de données
+        utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
+        if not utilisateur:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+
+        # Mettre à jour le champ `cptDefi`
+        utilisateur.cptDefi = update_request.cptDefi
+        db.commit()
+        db.refresh(utilisateur)  # Recharger les données mises à jour depuis la DB
+        return utilisateur
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour de cptDefi : {str(e)}")
+
+
+
 
 # Define password hash verification
 def verifier_mdp(plain_password, mot_de_passe):
@@ -250,7 +283,7 @@ async def ajouter_defi(defi: DefiBase, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Erreur lors de l'ajout du défi : {str(e)}")
 
 @app.get('/defis/', response_model=List[DefiModele])
-async def lire_defis(db: Session = Depends(get_db), skip: int = 0, limit: int = 100):
+async def lire_defis(db: Session = Depends(get_db), skip: int = 0, limit: int = 1000):
     defis = db.query(models.Defi).offset(skip).limit(limit).all()
     return defis
 
@@ -851,25 +884,60 @@ async def add_badge(badge_data: BadgeBase, db: Session = Depends(get_db)):
     
     return new_badge
 
-@app.post("/gain_badge", response_model=UtilisateurBadgeModele)
-async def ajout_gain_badge(
-    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
-    id_badge: int,
-    db: Session = Depends(get_db)):
-    new_gain = models.UtilisateurBadge(
-        pseudo_utilisateur = current_user.pseudo,
-        id_badge=id_badge
-    )
+@app.post("/gain_badge")
+async def ajout_gain_badge(pseudo_utilisateur: str, id_badge: int, db: Session = Depends(get_db)):
+    # Vérifier si l'utilisateur a déjà ce badge
+    utilisateur_badge = db.query(models.UtilisateurBadge).filter(
+        models.UtilisateurBadge.pseudo_utilisateur == pseudo_utilisateur,
+        models.UtilisateurBadge.id_badge == id_badge
+    ).first()
+
+    if utilisateur_badge:
+        # Si l'utilisateur a déjà ce badge
+        raise HTTPException(status_code=400, detail="L'utilisateur possède déjà ce badge.")
     
     try:
+        # Ajouter un nouveau badge pour l'utilisateur
+        new_gain = models.UtilisateurBadge(
+            pseudo_utilisateur=pseudo_utilisateur,
+            id_badge=id_badge
+        )
         db.add(new_gain)
         db.commit()
         db.refresh(new_gain)
     except Exception as e:
-        db.rollback()  # Rollback en cas d'erreur
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Erreur pendant l'ajout du gain de badge: {str(e)}")
-    
-    return new_gain
+
+    return {"message": "Badge ajouté avec succès", "badge": new_gain}
+
+
+@app.delete("/gain_badge/{pseudo_utilisateur}")
+async def supprimer_tous_les_badges(
+    pseudo_utilisateur: str,
+    db: Session = Depends(get_db)
+):
+    # Vérifier si l'utilisateur a des badges
+    gains = db.query(models.UtilisateurBadge).filter(
+        models.UtilisateurBadge.pseudo_utilisateur == pseudo_utilisateur
+    ).all()
+
+    if not gains:
+        raise HTTPException(status_code=404, detail="Aucun badge trouvé pour cet utilisateur.")
+
+    # Supprimer tous les badges de l'utilisateur
+    try:
+        db.query(models.UtilisateurBadge).filter(
+            models.UtilisateurBadge.pseudo_utilisateur == pseudo_utilisateur
+        ).delete()
+
+        db.commit()
+    except Exception as e:
+        db.rollback()  # Rollback en cas d'erreur
+        raise HTTPException(status_code=500, detail=f"Erreur pendant la suppression des badges: {str(e)}")
+
+    return {"message": "Tous les badges ont été supprimés avec succès."}  # Retour d'un message de succès
+
 
 @app.get("/badge/{pseudo}", response_model=List[BadgeModele])
 async def lire_ses_badges(
@@ -885,6 +953,20 @@ async def lire_ses_badges(
     badges = [db.query(models.Badge).filter(models.Badge.id_badge == badge.id_badge).first() for badge in infos_badges]
     badges = [badge for badge in badges if badge is not None]  # Enlever les valeurs None
     return badges
+
+@app.get("/badge_manquant/{id_badge}", response_model=BadgeModele)
+async def recuperer_badge_par_id(
+    id_badge: int,
+    db: Session = Depends(get_db)
+):
+    # Rechercher le badge avec l'id donné
+    badge = db.query(models.Badge).filter(models.Badge.id_badge == id_badge).first()
+    
+    if not badge:
+        raise HTTPException(status_code=404, detail="Badge introuvable.")
+    
+    return badge
+   
 
 # Créer un exercice
 @app.post('/exercices/', response_model=ExerciceModele)
@@ -1002,6 +1084,9 @@ async def lire_exercices_realises(
         
         return exercices
     
+    except HTTPException as e:
+        raise e
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur : {str(e)}")
 
@@ -1028,7 +1113,52 @@ async def supprimer_exercice_realise(
 
         return {"message": f"L'exercice avec ID {id_exercice} pour l'utilisateur '{pseudo}' a été supprimé avec succès."}
     
+    except HTTPException as e:
+        raise e
+    
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erreur : {str(e)}")
 
+@app.post('/stat/', response_model=StatsUtilisateur)
+async def ajouter_stat(
+    pseudo_utilisateur: str,
+    type_stat: str,
+    valeur_stat: float,
+    db: Session = Depends(get_db)
+):
+    try:
+        db_stat = models.Stat(
+            pseudo_utilisateur=pseudo_utilisateur,
+            type_stat=type_stat,
+            valeur_stat=valeur_stat,
+            date_stat=int(time.time())
+        )
+        
+        utilisateur_db = get_utilisateur(db, db_stat.pseudo_utilisateur)
+
+        if not utilisateur_db:
+            raise HTTPException(status_code=404, detail="Aucun utilisateur trouvé")
+
+        db.add(db_stat)
+        db.commit()
+        db.refresh(db_stat)
+        return db_stat
+    
+    except HTTPException as e:
+        raise e
+    
+    except Exception as e:
+        db.rollback()  # Rollback the transaction if an error occurs
+        raise HTTPException(status_code=500, detail=f"Erreur lors de l'ajout de la stat : {str(e)}")
+    
+@app.get('/stat/', response_model=List[StatsUtilisateur])
+async def lire_stats_utilisateur(
+    pseudo_utilisateur: str,
+    type_stat: str,
+    db: Session = Depends(get_db),
+    skip: int = 0,
+    limit: int = 200
+):
+    stats = db.query(models.Stat).filter(models.Stat.pseudo_utilisateur == pseudo_utilisateur, models.Stat.type_stat == type_stat).offset(skip).limit(limit).all()
+    return stats
