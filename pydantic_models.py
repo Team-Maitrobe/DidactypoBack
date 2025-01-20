@@ -22,7 +22,6 @@ class UtilisateurRenvoye(BaseModel):
     pseudo: str
     nom: str
     prenom: str
-    cptDefi: int
 
 class UpdateCptDefiRequest(BaseModel):
     cptDefi: int
