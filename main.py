@@ -32,6 +32,7 @@ from pydantic_models import (
     UtilisateurGroupeBase, UtilisateurGroupeModele,
     UtilisateurBadgeModele, ExerciceBase, ExerciceModele,
     ExerciceUtilisateurBase, ExerciceUtilisateurModele,UpdateCptDefiRequest,
+    PasswordChangeRequest
 )
 
 app = FastAPI()
@@ -189,15 +190,11 @@ async def mettre_a_jour_cpt_defi(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour de cptDefi : {str(e)}")
 
 
-
-
 @app.patch("/modification_mdp")
-async def modifier_mdp(
-    pseudo: str,
-    ancien_mdp: str,
-    new_mdp: str,
-    db: Session = Depends(get_db)
-):
+async def modifier_mdp(request: PasswordChangeRequest, db: Session = Depends(get_db)):
+    pseudo = request.pseudo
+    ancien_mdp = request.ancien_mdp
+    new_mdp = request.new_mdp
     # Vérification de la présence de l'utilisateur
     db_utilisateur = get_utilisateur(db, pseudo)
     if not db_utilisateur:
