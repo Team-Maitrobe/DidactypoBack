@@ -8,7 +8,7 @@ from typing import Annotated, List
 import jwt
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from fastapi import FastAPI, HTTPException, Depends, Query, status
+from fastapi import FastAPI, HTTPException, Depends, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jwt.exceptions import InvalidTokenError
@@ -25,7 +25,7 @@ from pydantic_models import (
     DefiBase, DefiModele,
     UtilisateurDefiBase, UtilisateurDefiModele,
     BadgeBase, BadgeModele,
-    CoursBase, CoursModele,
+    CoursBase, CoursModele,UtilisateurCoursBase,
     UtilisateurCoursModele,
     SousCoursBase, SousCoursModele,
     GroupeBase, GroupeModele,
@@ -78,9 +78,9 @@ async def on_startup():
         if not is_initialized(db, models.Cours):
             # Run the SQL file only if the database is uninitialized
             execute_sql_file(sql_file_path)
-            print("La base de donnée a été initialisée avec les données existantes")
+            print("La base de donnée a été initialisée avec les données des cours.")
         else:
-            print("La base de donnée est déjà initialisée")
+            print("Les données des cours sont déjà initialisées.")
 
         # Vérifie et initialise les données pour les exercices
         if not is_initialized(db, models.Exercice):
@@ -94,14 +94,14 @@ async def on_startup():
             execute_sql_file(badges_sql_file_path)
             print("La base de données a été initialisée avec les données des badges.")
         else:
-            print("Les données des exercices sont déjà initialisées.")
+            print("Les données des badges sont déjà initialisées.")
 
         # Vérifie et initialise les données pour les defis
         if not is_initialized(db, models.Defi):
             execute_sql_file(defi_sql_file_path)
             print("La base de données a été initialisée avec les données des defi.")
         else:
-            print("Les données des exercices sont déjà initialisées.")
+            print("Les données des badges sont déjà initialisées.")
     finally:
         db.close()
 
@@ -554,29 +554,53 @@ def delete_sous_cours(id_sous_cours: int, id_cours_parent: int, db: Session = De
 
     return {"message": f"Sous-cours avec ID {id_sous_cours} et ID parent {id_cours_parent} supprimé."}
 
-# Complétion cours
+#complétion cours
 @app.post('/completion_cours', response_model=UtilisateurCoursModele)
 async def ajouter_completion_cours(
-    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
-    id_cours: int,
-    db: Session = Depends(get_db)):
+    completion: UtilisateurCoursBase,
+    db: Session = Depends(get_db)
+):
+    # Vérifier si une progression existe déjà pour ce cours et cet utilisateur
+    existing_completion = db.query(models.UtilisateurCours).filter(
+        models.UtilisateurCours.pseudo_utilisateur == completion.pseudo_utilisateur,
+        models.UtilisateurCours.id_cours == completion.id_cours
+    ).first()
     
+    if existing_completion:
+        # Si une progression existe déjà, on retourne simplement celle-ci
+        return existing_completion
+        
+    # Si pas de progression existante, on continue avec la création
     new_completion = models.UtilisateurCours(
-        id_cours=id_cours,
-        pseudo_utilisateur=current_user.id,
-        progression=1 
+        id_cours=completion.id_cours,
+        pseudo_utilisateur=completion.pseudo_utilisateur,
+        progression=completion.progression
     )
 
     try:
         db.add(new_completion)
         db.commit()
         db.refresh(new_completion)
+        
+        # Vérifier si tous les cours sont terminés
+        total_cours = db.query(models.Cours).count()
+        cours_completes = db.query(models.UtilisateurCours).filter_by(
+            pseudo_utilisateur=completion.pseudo_utilisateur,
+            progression=100
+        ).count()
+
+        if cours_completes == total_cours:
+            await ajout_gain_badge(
+                pseudo_utilisateur=completion.pseudo_utilisateur,
+                id_badge=1,
+                db=db
+            )
+        
     except Exception as e:
-        # Rollback en cas d'erreur
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erreur pendant l'ajout de la completion: {str(e)}")
 
-    return new_completion 
+    return new_completion
 
 # Groupes
 @app.post('/groupe/', response_model=GroupeBase)
@@ -641,7 +665,10 @@ async def lire_groupe(db: Session = Depends(get_db), skip: int = 0, limit: int =
 @app.get('/groupe/{id_groupe}', response_model=GroupeModele)
 async def lire_infos_groupe(id_groupe: int, db: Session = Depends(get_db)):
     groupe = db.query(models.Groupe).filter(models.Groupe.id_groupe == id_groupe).first()
-    return groupe
+    if groupe:
+        return groupe
+    else :
+        return Response(status_code=204)
 
 @app.delete('/groupe/{id_groupe}', response_model=dict)
 async def supprimer_groupe(id_groupe: int, db: Session = Depends(get_db)):
@@ -814,7 +841,7 @@ async def lire_groupes_d_utilisateur(
 
         # Si aucun groupe n'est trouvé pour cet utilisateur
         if not groupe_utilisateur:
-            raise HTTPException(status_code=404, detail="Aucun groupe trouvé pour cet utilisateur.")
+            return Response(status_code=204)
         
         return groupe_utilisateur  # Retourner la liste des groupes de l'utilisateur
     
@@ -894,7 +921,7 @@ async def ajout_gain_badge(pseudo_utilisateur: str, id_badge: int, db: Session =
 
     if utilisateur_badge:
         # Si l'utilisateur a déjà ce badge
-        raise HTTPException(status_code=400, detail="L'utilisateur possède déjà ce badge.")
+        return Response(status_code=204)
     
     try:
         # Ajouter un nouveau badge pour l'utilisateur
