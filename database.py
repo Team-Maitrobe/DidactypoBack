@@ -14,7 +14,7 @@ Base = declarative_base()
 def execute_sql_file(file_path: Path):
     """Execute the SQL commands from a file."""
     with sqlite3.connect(DATABASE_FILE) as conn:
-        with open(file_path, "r") as file:
+        with open(file_path, "r", encoding='UTF-8') as file:
             sql_script = file.read()
             conn.executescript(sql_script)
         conn.commit()
