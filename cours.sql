@@ -26,7 +26,7 @@ INSERT INTO SOUSCOURS (id_cours_parent, id_sous_cours, titre_sous_cours, contenu
 \n On va commencer par le petit doigt gauche et continuer de la gauche vers la droite.');
 INSERT INTO SOUSCOURS (id_cours_parent, id_sous_cours, titre_sous_cours, contenu_cours, chemin_img_sous_cours) VALUES
 (2,2,'Le petit doigt gauche','Le petit doigt gauche a un rôle très important. Il doit saisir la touche Maj quand on veut écrire des lettres majuscules. De plus, il s''occupe aussi des touches a, q, w, 1, 2 et des touches tout à gauche du clavier.
-Il y a juste un problème : c''est qu''on n''utilise jamais ce doigt pour écrire au clavier. Il faudra donc s''entraîner davantage sur ce doigt et même éventuellement le muscler.','https://fr.pinterest.com/pin/azerty-keyboard--492722015487127908/');
+Il y a juste un problème : c''est qu''on n''utilise jamais ce doigt pour écrire au clavier. Il faudra donc s''entraîner davantage sur ce doigt et même éventuellement le muscler.','https://i.postimg.cc/4NNWGfp0/Azerty-keyboard.jpg');
 INSERT INTO SOUSCOURS (id_cours_parent, id_sous_cours, titre_sous_cours, contenu_cours, chemin_img_sous_cours) VALUES
 (2,3,'L''annulaire gauche','L''annulaire gauche a un rôle plus simple que celui d''avant. Il s''occupe des touches z, s, x et 3.
 Mais lui aussi n''a pas été vraiment utilisé, donc on se retrouve un peu avec le même problème que le petit doigt. Alors, il faut prendre plus de temps pour l''entraîner.','https://i.postimg.cc/4NNWGfp0/Azerty-keyboard.jpg');
