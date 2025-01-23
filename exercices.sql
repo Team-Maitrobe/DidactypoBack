@@ -2,7 +2,7 @@ INSERT INTO EXERCICE (titre_exercice, description_exercice) VALUES
 ('Exercice 1 ', 'j f jjj fff jjff jffj qsdf jklm qm sl dk fj sd kl fq mj qjskdlfm');
 
 INSERT INTO EXERCICE (titre_exercice, description_exercice) VALUES
-('Exercice 2 ', 'azert yuiop mlkj hgfd dsq wxcvbn ,;:! IOa YTf 234567890 ');
+('Exercice 2 ', 'tarze pyiou mjlk hgfd qds wncbxv !;!,: IOa YTf');
 
 INSERT INTO EXERCICE (titre_exercice, description_exercice) VALUES
 ('Exercice 3 ', 'Les étudiants de l''université dactylographient tous les jours avec entrain.');

@@ -57,8 +57,7 @@ INSERT INTO COURS (titre_cours, description_cours, duree_cours, difficulte_cours
 INSERT INTO SOUSCOURS (id_cours_parent, id_sous_cours, titre_sous_cours, contenu_cours) VALUES
 (3,1,'Un départ dans la pratique','Salut !
 Il est temps de rentrer dans le cœur de la dactylographie : la pratique, pour appliquer tout ce qu''on a vu ensemble dans les cours précédents.
-Tout d''abord, on va s''entraîner sur le placement des doigts avec des petits exercices simples pour s''entraîner sur chaque doigt. Pour cela, tu peux aller dans la section exercices.
-Si tu les as tous faits, passe à la page suivante.');
+Tout d''abord, on va s''entraîner sur le placement des doigts avec des petits exercices simples pour s''entraîner sur chaque doigt.');
 INSERT INTO SOUSCOURS (id_cours_parent, id_sous_cours, contenu_cours, chemin_img_sous_cours) VALUES
 (3,2,'Voilà, bon travail.
 Comme tu l''as sûrement vu, c''est pénible de s''obliger à utiliser cette manière de taper. Il est tout à fait normal que ta vitesse ait fortement diminué, mais c''est seulement une question de pratique.

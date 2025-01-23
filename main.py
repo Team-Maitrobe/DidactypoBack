@@ -401,7 +401,7 @@ async def lire_reussite_defi(
 
         # Si aucune réussite de défi n'est trouvée
         if not reussites_defi:
-            raise HTTPException(status_code=404, detail="Aucune réussite de défi trouvée.")
+            return Response(status_code=204) 
         
         return reussites_defi  # Retourner la liste complète des réussites de défi
     
@@ -618,7 +618,7 @@ async def ajouter_completion_cours(
         if cours_completes == total_cours:
             await ajout_gain_badge(
                 pseudo_utilisateur=completion.pseudo_utilisateur,
-                id_badge=1,
+                id_badge=8,
                 db=db
             )
         
@@ -1095,7 +1095,7 @@ async def ajouter_exercice_realise(
             models.ExerciceUtilisateur.pseudo == pseudo
         ).first()
         if relation_existante:
-            raise HTTPException(status_code=400, detail="L'exercice est déjà marqué pour cet utilisateur")
+            return Response(status_code=204)
 
         # Ajouter l'association
         exercice_realise = models.ExerciceUtilisateur(
@@ -1108,6 +1108,9 @@ async def ajouter_exercice_realise(
         db.refresh(exercice_realise)
         return exercice_realise
     
+    except HTTPException as e:
+        raise e
+
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erreur : {str(e)}")
@@ -1133,7 +1136,7 @@ async def lire_exercices_realises(
         ).offset(skip).limit(limit).all()
 
         if not exercices:
-            raise HTTPException(status_code=404, detail="Aucun exercice réalisé trouvé pour cet utilisateur")
+            return Response(status_code=204)
         
         return exercices
     
@@ -1158,16 +1161,13 @@ async def supprimer_exercice_realise(
         ).first()
         
         if not relation:
-            raise HTTPException(status_code=404, detail="Exercice non trouvé pour cet utilisateur")
+            return Response(status_code=204)
 
         # Supprimer la relation
         db.delete(relation)
         db.commit()
 
         return {"message": f"L'exercice avec ID {id_exercice} pour l'utilisateur '{pseudo}' a été supprimé avec succès."}
-    
-    except HTTPException as e:
-        raise e
     
     except Exception as e:
         db.rollback()
