@@ -148,3 +148,8 @@ class ExerciceUtilisateurBase(BaseModel):
 class ExerciceUtilisateurModele(ExerciceUtilisateurBase):
     class Config:
         orm_mode = True
+
+class PasswordChangeRequest(BaseModel):
+    pseudo: str
+    ancien_mdp: str
+    new_mdp: str
