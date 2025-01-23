@@ -36,7 +36,7 @@ VALUES ('Caché', 'Tu n''as pas encore obtenu ce badge.', '/src/img/BadgesDidact
 
 -- Badge 10
 INSERT INTO BADGES (titre_badge, description_badge, image_badge)
-VALUES ('10 Mots pas minute', 'Atteindre une vitesse d''écriture de 10 mots par minute', '/src/img/BadgesDidactypo/mpm10.png');
+VALUES ('10 Mots pas minute', 'Atteindre une vitesse d''écriture de moins de 10 mots par minute (tu vas y arriver)', '/src/img/BadgesDidactypo/mpm10.png');
 
 -- Badge 11
 INSERT INTO BADGES (titre_badge, description_badge, image_badge)
