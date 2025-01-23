@@ -142,7 +142,7 @@ async def lire_utilisateurs(db: Session = Depends(get_db), skip: int = 0, limit:
     try:
         utilisateurs = db.query(models.Utilisateur).offset(skip).limit(limit).all()
         if not utilisateurs:
-            raise HTTPException(status_code=404, detail="No users found")
+            return Response(status_code=204)
         valUtilisateurs = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom, cptDefi=user.cptDefi) for user in utilisateurs]
         return valUtilisateurs
     except Exception as e:
@@ -163,7 +163,7 @@ async def lire_utilisateur(pseudo: str, db: Session = Depends(get_db)):
     try:
         utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
         if not utilisateur:
-            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+            return Response(status_code=204)
         return utilisateur
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération de l'utilisateur : {str(e)}")
@@ -212,7 +212,7 @@ async def modifier_mdp(request: PasswordChangeRequest, db: Session = Depends(get
         # Mise à jour du mot de passe
         db_utilisateur.mot_de_passe = get_mdp_hashe(new_mdp)
         db.commit()
-        return {"message": f"Mot de passe de l'utilisateur '{pseudo}' modifié avec succès."}
+        return {"message": f"Mot de passe de '{pseudo}' modifié avec succès."}
     except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="Erreur interne, veuillez réessayer plus tard.")

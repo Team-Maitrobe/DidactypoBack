@@ -36,25 +36,25 @@ VALUES ('Caché', 'Tu n''as pas encore obtenu ce badge.', '/src/img/BadgesDidact
 
 -- Badge 10
 INSERT INTO BADGES (titre_badge, description_badge, image_badge)
-VALUES ('10 Mots pas minute', 'Atteindre une vitesse d''écriture de moins de 10 mots par minute (tu vas y arriver)', '/src/img/BadgesDidactypo/mpm10.png');
+VALUES ('10 Mots par minute', 'Atteindre une vitesse d''écriture de moins de 10 mots par minute (tu vas y arriver)', '/src/img/BadgesDidactypo/mpm10.png');
 
 -- Badge 11
 INSERT INTO BADGES (titre_badge, description_badge, image_badge)
-VALUES ('25 Mots pas minute', 'Atteindre une vitesse d''écriture de 25 mots par minute', '/src/img/BadgesDidactypo/mpm25.png');
+VALUES ('25 Mots par minute', 'Atteindre une vitesse d''écriture de 25 mots par minute', '/src/img/BadgesDidactypo/mpm25.png');
 
 -- Badge 12
 INSERT INTO BADGES (titre_badge, description_badge, image_badge)
-VALUES ('40 Mots pas minute', 'Atteindre une vitesse d''écriture de 40 mots par minute', '/src/img/BadgesDidactypo/mpm40.png');
+VALUES ('40 Mots par minute', 'Atteindre une vitesse d''écriture de 40 mots par minute', '/src/img/BadgesDidactypo/mpm40.png');
 
 -- Badge 13
 INSERT INTO BADGES (titre_badge, description_badge, image_badge)
-VALUES ('60 Mots pas minute', 'Atteindre une vitesse d''écriture de 60 mots par minute', '/src/img/BadgesDidactypo/mpm60.png');
+VALUES ('60 Mots par minute', 'Atteindre une vitesse d''écriture de 60 mots par minute', '/src/img/BadgesDidactypo/mpm60.png');
 
 -- Badge 14
 INSERT INTO BADGES (titre_badge, description_badge, image_badge)
-VALUES ('80 Mots pas minute', 'Atteindre une vitesse d''écriture de 80 mots par minute', '/src/img/BadgesDidactypo/mpm80.png');
+VALUES ('80 Mots par minute', 'Atteindre une vitesse d''écriture de 80 mots par minute', '/src/img/BadgesDidactypo/mpm80.png');
 
 -- Badge 15
 INSERT INTO BADGES (titre_badge, description_badge, image_badge)
-VALUES ('100 Mots pas minute', 'Atteindre une vitesse d''écriture de 100 mots par minute', '/src/img/BadgesDidactypo/mpm100.png');
+VALUES ('100 Mots par minute', 'Atteindre une vitesse d''écriture de 100 mots par minute', '/src/img/BadgesDidactypo/mpm100.png');
 
