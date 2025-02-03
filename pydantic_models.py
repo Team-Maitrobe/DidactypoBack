@@ -115,13 +115,20 @@ class GroupeModele(GroupeBase):
         orm_mode = True
 
 class UtilisateurGroupeBase(BaseModel):
-        pseudo_utilisateur : str
-        id_groupe : int
-        est_admin : bool
+    pseudo_utilisateur : str
+    id_groupe : int
+    est_admin : bool
 
 class UtilisateurGroupeModele(UtilisateurGroupeBase):
     class Config:
         orm_mode = True 
+
+class IdClasses(BaseModel):
+    id_classe: int
+    is_admin: bool
+    
+    class Config:
+        orm_mode = True
 
 class UtilisateurCoursBase(BaseModel):
     pseudo_utilisateur: str

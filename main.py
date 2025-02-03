@@ -1,12 +1,13 @@
 # Imports standards Python
 import logging
 from datetime import datetime, timedelta, timezone
+import os
 from pathlib import Path
 from typing import Annotated, List
 
 # Imports tiers
 import jwt
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from fastapi import FastAPI, HTTPException, Depends, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,7 +21,7 @@ from database import SessionLocal, engine, execute_sql_file, is_initialized
 from auth import Token, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM, pwd_context, oauth2_scheme
 import models
 from pydantic_models import (
-    UtilisateurBase,  UtilisateurModele,
+    IdClasses, UtilisateurBase,  UtilisateurModele,
     StatsUtilisateur, UtilisateurRenvoye,
     DefiBase, DefiModele,
     UtilisateurDefiBase, UtilisateurDefiModele,
@@ -655,14 +656,6 @@ async def ajouter_groupe(
         if not existing_user:
             raise HTTPException(status_code=404, detail=f"Utilisateur avec le pseudo '{pseudo_admin}' non trouvé")
 
-        # Case 5: Check if the user is already part of another group as an admin
-        existing_user_group = db.query(models.UtilisateurGroupe).filter(
-            models.UtilisateurGroupe.pseudo_utilisateur == pseudo_admin,
-            models.UtilisateurGroupe.est_admin == True
-        ).first()
-        if existing_user_group:
-            raise HTTPException(status_code=400, detail=f"L'utilisateur '{pseudo_admin}' est déjà administrateur dans un autre groupe.")
-
         # Add the user to the group
         db_utilisateur_groupe = models.UtilisateurGroupe(
             pseudo_utilisateur=pseudo_admin,
@@ -874,6 +867,24 @@ async def lire_groupes_d_utilisateur(
     except Exception as e:
         # Gestion des erreurs
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des groupes de l'utilisateur : {str(e)}")
+    
+@app.get('/membre_classes/{pseudo_utilisateur}', response_model=List[GroupeModele])
+async def lire_classes_utilisateur(pseudo_utilisateur: str, db: Session = Depends(get_db)):
+    try:
+        groupes_utilisateur = db.query(models.UtilisateurGroupe).options(
+            joinedload(models.UtilisateurGroupe.groupe)
+        ).filter(
+            models.UtilisateurGroupe.pseudo_utilisateur == pseudo_utilisateur
+        ).all()
+
+        if not groupes_utilisateur:
+            return []
+
+        return [groupe.groupe for groupe in groupes_utilisateur]
+
+    except Exception as e:
+        db.rollback()  # Annulation de la transaction en cas d'erreur
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des classes : {str(e)}")
 
 
 @app.delete('/membres_classe', response_model=dict)
