@@ -1030,6 +1030,24 @@ async def recuperer_badge_par_id(
         raise HTTPException(status_code=404, detail="Badge introuvable.")
     
     return badge
+
+@app.get("/badge_membres/{id_badge}", response_model=List[UtilisateurRenvoye])
+async def recuperer_membres_badge(
+    id_badge: int,
+    db: Session = Depends(get_db)
+):
+    try:
+        affiliations = db.query(models.UtilisateurBadge).filter(models.UtilisateurBadge.id_badge == id_badge).all()
+
+        if not affiliations:
+            return Response(status_code=204)
+        utilisateurs = [db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == affiliation.pseudo_utilisateur).first() for affiliation in affiliations]
+
+        utilisateurs = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom) for user in utilisateurs]
+        return utilisateurs
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des membres du badge : {str(e)}")  
    
 
 # Créer un exercice
