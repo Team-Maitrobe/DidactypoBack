@@ -4,6 +4,9 @@ from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
 from typing import Annotated, List
+import asyncio
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 # Imports tiers
 import jwt
@@ -33,10 +36,39 @@ from pydantic_models import (
     UtilisateurGroupeBase, UtilisateurGroupeModele,
     UtilisateurBadgeModele, ExerciceBase, ExerciceModele,
     ExerciceUtilisateurBase, ExerciceUtilisateurModele,UpdateCptDefiRequest,
-    PasswordChangeRequest
+    PasswordChangeRequest,
 )
 
 app = FastAPI()
+scheduler = BackgroundScheduler()
+
+
+def increment_weekly_challenge():
+    try:
+        db = SessionLocal()
+        defi_semaine = db.query(models.DefiSemaine).first()
+        
+        if not defi_semaine:
+            defi_semaine = models.DefiSemaine(numero_defi=1)
+            db.add(defi_semaine)
+        else:
+            defi_semaine.numero_defi += 1
+        
+        db.commit()
+        print(f"✅ Nouveau numéro de défi : {defi_semaine.numero_defi}")
+        
+    except Exception as e:
+        print(f"❌ Erreur lors de la mise à jour du défi : {str(e)}")
+    finally:
+        db.close()
+
+# Modifier le scheduler pour utiliser directement la fonction synchrone
+scheduler.add_job(
+    increment_weekly_challenge,
+    trigger=CronTrigger(day_of_week='mon', hour=4, minute=0),
+    id='increment_weekly_challenge',
+    replace_existing=True
+)
 
 # Configuration CORS configuration to allow access from specific origins
 origins = [
@@ -73,6 +105,7 @@ async def on_startup():
     exercices_sql_file_path = Path(__file__).parent / "exercices.sql"
     badges_sql_file_path = Path(__file__).parent / "badges.sql"
     defi_sql_file_path = Path(__file__).parent / "defi.sql"
+    scheduler.start()
 
 
     db = SessionLocal()
@@ -411,17 +444,74 @@ async def lire_reussite_defi(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des réussites de défi : {str(e)}")
 
 #Récuperer les réussites de défi d'un utilisateur
-@app.get('/reussites_defi/{pseudo_utilisateur}', response_model=List[UtilisateurDefiModele])
+@app.get('/reussites_defi/utilisateurs/{pseudo_utilisateur}', response_model=List[UtilisateurDefiModele])
 async def lire_reussite_defi_utilisateur(
     pseudo_utilisateur: str,  # Pseudo de l'utilisateur passé en paramètre de l'URL
+
+
+    id_defi: int = None,  # Paramètre optionnel pour filtrer par défi spécifique
+
+    # mettre au dessus la valeur de l'id actuel
+
     db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
     skip: int = 0,  # Paramètre optionnel pour le décalage (pagination)
     limit: int = 100  # Paramètre optionnel pour la limite du nombre de résultats
 ):
     try:
-        # Récupérer toutes les réussites de défi de l'utilisateur
-        reussites_defi = db.query(models.UtilisateurDefi).filter(
+        # Commencer la requête de base
+        query = db.query(models.UtilisateurDefi).filter(
             models.UtilisateurDefi.pseudo_utilisateur == pseudo_utilisateur
+        )
+
+        # Si un id_defi est fourni, ajouter le filtre correspondant
+        if id_defi is not None:
+            query = query.filter(models.UtilisateurDefi.id_defi == id_defi)
+
+        # Appliquer la pagination et récupérer les résultats
+        reussites_defi = query.offset(skip).limit(limit).all()
+
+        # Si aucune réussite n'est trouvée
+        if not reussites_defi:
+            raise HTTPException(
+                status_code=404, 
+                detail="Aucune réussite de défi trouvée pour cet utilisateur" + 
+                       (f" et ce défi" if id_defi else ".")
+            )
+        
+        return reussites_defi
+
+    except Exception as e:
+        # Gestion des erreurs (rollback en cas d'exception)
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des réussites de défi : {str(e)}")
+    
+# Récupérer les résuiste défi par défi
+@app.get('/reussites_defi/defi/{id_defi}', response_model=List[UtilisateurDefiModele])
+async def lire_reussite_defi_utilisateur_id_defi(
+    id_defi: int,  # id du défi passé en paramètre de l'URL
+    db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
+    skip: int = 0,  # Paramètre optionnel pour le décalage (pagination)
+    limit: int = 100  # Paramètre optionnel pour la limite du nombre de résultats
+):
+    try:
+        # Sous-requête pour obtenir le meilleur temps de chaque utilisateur pour ce défi
+        subquery = db.query(
+            models.UtilisateurDefi.pseudo_utilisateur,
+            func.min(models.UtilisateurDefi.temps_reussite).label('min_temps_reussite')
+        ).filter(
+            models.UtilisateurDefi.id_defi == id_defi
+        ).group_by(
+            models.UtilisateurDefi.pseudo_utilisateur
+        ).subquery()
+
+        # Requête principale qui joint avec la sous-requête pour obtenir les enregistrements complets
+        reussites_defi = db.query(models.UtilisateurDefi).join(
+            subquery,
+            (models.UtilisateurDefi.pseudo_utilisateur == subquery.c.pseudo_utilisateur) &
+            (models.UtilisateurDefi.temps_reussite == subquery.c.min_temps_reussite)
+        ).filter(
+            models.UtilisateurDefi.id_defi == id_defi
+        ).order_by(
+            models.UtilisateurDefi.temps_reussite  # Tri par temps croissant
         ).offset(skip).limit(limit).all()
 
         # Si aucune réussite n'est trouvée pour cet utilisateur
@@ -1226,3 +1316,23 @@ async def lire_stats_utilisateur(
 ):
     stats = db.query(models.Stat).filter(models.Stat.pseudo_utilisateur == pseudo_utilisateur, models.Stat.type_stat == type_stat).offset(skip).limit(limit).all()
     return stats
+
+
+@app.get("/defi_semaine")
+def get_defi_semaine(db: Session = Depends(get_db)):
+    try:
+        defi_semaine = db.query(models.DefiSemaine).first()
+        
+        if not defi_semaine:
+            # Créer le premier défi s'il n'existe pas
+            defi_semaine = models.DefiSemaine(numero_defi=1)
+            db.add(defi_semaine)
+            db.commit()
+            
+        return {"numero_defi": defi_semaine.numero_defi}  # Retourner un dict JSON valide
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erreur lors de la récupération du numéro de défi : {str(e)}"
+        )
