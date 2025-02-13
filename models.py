@@ -60,6 +60,12 @@ class Defi(Base):
     titre_defi = Column(String(128), nullable=False)
     description_defi = Column(String(1024), nullable=False)
 
+class DefiSemaine(Base):
+    __tablename__ = "defi_semaine"
+    
+    id = Column(Integer, primary_key=True)
+    numero_defi = Column(Integer, default=1)
+
 class Badge(Base):
     __tablename__ = 'BADGES'
     id_badge = Column(Integer, primary_key=True, autoincrement=True)
