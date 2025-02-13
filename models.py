@@ -132,3 +132,12 @@ class ExerciceUtilisateur(Base):
     # Relations facultatives pour naviguer
     utilisateur = relationship("Utilisateur", back_populates="exercices_realises")
     exercice = relationship("Exercice", back_populates="utilisateurs_ayant_realise")
+
+class ExerciceGroupe(Base):
+    __tablename__ = 'EXERCICE_GROUPE'
+
+    id_exercice = Column(Integer, ForeignKey('EXERCICE.id_exercice'), primary_key=True)
+    id_groupe = Column(Integer,ForeignKey('GROUPE.id_groupe'),primary_key=True)
+    
+
+    #utilisateurs_ayant_realise = relationship("ExerciceMembreGroupe", back_populates="exercice")
