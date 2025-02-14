@@ -847,7 +847,7 @@ async def ajout_membre_classe(
         raise HTTPException(status_code=500, detail=f"Erreur lors de l'ajout de la réussite du défi : {str(e)}")
 
 
-@app.get('/admins_par_groupe/', response_model=List[UtilisateurRenvoye])
+@app.get('/admins_par_groupe/{id_groupe}', response_model=List[UtilisateurRenvoye])
 async def lire_admin_groupe(
     id_groupe: int,
     db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
@@ -909,10 +909,13 @@ async def lire_tous_les_membres_classe(
 ):
     try:
         # Récupérer les relations entre groupes et utilisateurs pour un groupe spécifique
-        membres_classe = db.query(models.UtilisateurGroupe).filter(models.UtilisateurGroupe.id_groupe == id_groupe).offset(skip).limit(limit).all()
+        membres_classe = db.query(models.UtilisateurGroupe).filter(
+            (models.UtilisateurGroupe.id_groupe == id_groupe) &
+            (models.UtilisateurGroupe.est_admin == False)
+            ).offset(skip).limit(limit).all()
 
         if not membres_classe:
-            raise HTTPException(status_code=404, detail="Aucune relation groupe-utilisateur trouvée.")
+            return Response(status_code=204)
 
         # Extraire les pseudos des membres
         pseudos_membres = [membre.pseudo_utilisateur for membre in membres_classe]
@@ -924,11 +927,6 @@ async def lire_tous_les_membres_classe(
         utilisateurs_renvoyes = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom) for user in utilisateurs]
 
         return utilisateurs_renvoyes
-
-        if not utilisateurs:
-            raise HTTPException(status_code=404, detail="Aucun utilisateur trouvé pour ce groupe.")
-
-        return utilisateurs
     
     except HTTPException as e:
         raise e
@@ -936,6 +934,92 @@ async def lire_tous_les_membres_classe(
     except Exception as e:
         # Gestion des erreurs
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des relations groupe-utilisateur : {str(e)}")
+    
+@app.get('/membre_est_admin/{id_groupe}', response_model=bool)
+async def verifier_admin_classe(
+    id_groupe: int,  # ID du groupe à vérifier
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
+    db: Session = Depends(get_db)
+):
+    try:
+        # Vérifier si l'utilisateur courant est admin de la classe
+        lien_utilisateur_courant_classe = db.query(models.UtilisateurGroupe).filter(
+            models.UtilisateurGroupe.id_groupe == id_groupe,
+            models.UtilisateurGroupe.pseudo_utilisateur == current_user.pseudo,
+            models.UtilisateurGroupe.est_admin == True
+        ).first()
+        if lien_utilisateur_courant_classe:
+            return True
+        else:
+            return False
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la vérification du statut administrateur : {str(e)}")
+    
+@app.patch('/admin_classe/', response_model=dict)
+async def changer_admin_classe(
+    id_groupe: int,  # ID du groupe à donner
+    pseudo_utilisateur: str,  # Pseudo de l'utilisateur à promouvoir/démouvoir
+    est_admin: bool,  # Booléen pour promouvoir/démouvoir l'utilisateur
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
+    db: Session = Depends(get_db)
+):
+    try:
+        #Vérifier si l'utilisateur change son propre statut
+        if pseudo_utilisateur == current_user.pseudo:
+            raise HTTPException(status_code=403, detail="Vous ne pouvez pas changer votre propre statut administrateur")
+        
+        # Vérifier si l'utilisateur courant est admin de la classe
+        lien_utilisateur_courant_classe = db.query(models.UtilisateurGroupe).filter(
+            models.UtilisateurGroupe.id_groupe == id_groupe,
+            models.UtilisateurGroupe.pseudo_utilisateur == current_user.pseudo,
+            models.UtilisateurGroupe.est_admin == True
+        ).first()
+        if not lien_utilisateur_courant_classe:
+            raise HTTPException(status_code=403, detail="Accès refusé : Vous devez être administrateur de cette classe")
+
+        # Vérifier si l'utilisateur à promouvoir/démouvoir existe et est dans la classe
+        utilisateur = get_utilisateur(db, pseudo_utilisateur)
+        if not utilisateur:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        
+        lien_utilisateur_classe = db.query(models.UtilisateurGroupe).filter(
+            models.UtilisateurGroupe.id_groupe == id_groupe,
+            models.UtilisateurGroupe.pseudo_utilisateur == pseudo_utilisateur
+        ).first()
+        if not lien_utilisateur_classe:
+            raise HTTPException(status_code=404, detail="L'utilisateur n'est pas membre de cette classe")
+
+        if est_admin:
+            # Cas 1 : Promouvoir l'utilisateur en tant qu'administrateur
+            # Vérifier si l'utilisateur est déjà administrateur
+            if lien_utilisateur_classe.est_admin:
+                return {"message": f"L'utilisateur '{pseudo_utilisateur}' est déjà administrateur de la classe"}
+            
+            # Promouvoir l'utilisateur en tant qu'administrateur
+            lien_utilisateur_classe.est_admin = est_admin
+            db.commit()
+
+            return {"message": f"Utilisateur '{pseudo_utilisateur}' promu administrateur de la classe"}
+        
+        else:
+            # Cas 2 : Démouvoir l'administrateur
+            # Vérifier si l'utilisateur est déjà un membre normal
+            if not lien_utilisateur_classe.est_admin:
+                return {"message": f"L'utilisateur '{pseudo_utilisateur}' est déjà un membre normal de la classe"}
+            
+            # Démouvoir l'administrateur
+            lien_utilisateur_classe.est_admin = est_admin
+            db.commit()
+
+            return {"message": f"Statut administrateur mis à jour pour l'utilisateur '{pseudo_utilisateur}'"}
+
+    except HTTPException as e:
+        raise e
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour du statut administrateur : {str(e)}")
 
 @app.get('/membre_classe/{pseudo_utilisateur}', response_model=UtilisateurGroupeModele)
 async def lire_groupes_d_utilisateur(
