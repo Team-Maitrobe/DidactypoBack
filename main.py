@@ -147,109 +147,26 @@ def get_utilisateur(db, pseudo: str):
         return utilisateur
     return None
 
-# Utilisateur Routes
-@app.post('/utilisateurs/', response_model=UtilisateurModele)
-async def creer_utilisateur(utilisateur: UtilisateurBase, db: Session = Depends(get_db)):
-    try:
-        utilisateur.mot_de_passe = get_mdp_hashe(utilisateur.mot_de_passe)
-        db_utilisateur = models.Utilisateur(
-            pseudo=utilisateur.pseudo,
-            mot_de_passe=utilisateur.mot_de_passe,
-            nom=utilisateur.nom,
-            prenom=utilisateur.prenom,
-            courriel=utilisateur.courriel,
-            est_admin=utilisateur.est_admin,
-            numCours=utilisateur.numCours,
-            tempsTotal=utilisateur.tempsTotal,
-            cptDefi=0  # Valeur par défaut pour cptDefi
-            )
-        db.add(db_utilisateur)
-        db.commit()
-        db.refresh(db_utilisateur)
-        return db_utilisateur
-    except Exception as e:
-        db.rollback()  # Rollback the transaction if an error occurs
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get('/utilisateurs/', response_model=List[UtilisateurRenvoye])
-async def lire_utilisateurs(db: Session = Depends(get_db), skip: int = 0, limit: int = 100):
-    try:
-        utilisateurs = db.query(models.Utilisateur).offset(skip).limit(limit).all()
-        if not utilisateurs:
-            return Response(status_code=204)
-        valUtilisateurs = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom, cptDefi=user.cptDefi) for user in utilisateurs]
-        return valUtilisateurs
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching users: {str(e)}")
-
-@app.delete('/utilisateurs/{pseudo}', response_model=dict)
-async def supprimer_utilisateur(pseudo: str, db: Session = Depends(get_db)):
-    db_utilisateur = get_utilisateur(db, pseudo)
-    if not db_utilisateur:
-        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-    
-    db.delete(db_utilisateur)
-    db.commit()
-    return {"message": f"Utilisateur '{pseudo}' supprimé avec succès."}
-
-@app.get('/utilisateurs/{pseudo}', response_model=UtilisateurModele)
-async def lire_utilisateur(pseudo: str, db: Session = Depends(get_db)):
-    try:
-        utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
-        if not utilisateur:
-            return Response(status_code=204)
-        return utilisateur
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération de l'utilisateur : {str(e)}")
-
-
-@app.put('/utilisateurs/{pseudo}/cptDefi', response_model=UtilisateurModele)
-async def mettre_a_jour_cpt_defi(
-    pseudo: str,
-    update_request: UpdateCptDefiRequest,  # Validation avec Pydantic
-    db: Session = Depends(get_db)  # Injection de la session DB
-):
-    try:
-        # Rechercher l'utilisateur dans la base de données
-        utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
-        if not utilisateur:
-            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-
-        # Mettre à jour le champ `cptDefi`
-        utilisateur.cptDefi = update_request.cptDefi
-        db.commit()
-        db.refresh(utilisateur)  # Recharger les données mises à jour depuis la DB
-        return utilisateur
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour de cptDefi : {str(e)}")
-
-
-@app.patch("/modification_mdp")
-async def modifier_mdp(request: PasswordChangeRequest, db: Session = Depends(get_db)):
-    pseudo = request.pseudo
-    ancien_mdp = request.ancien_mdp
-    new_mdp = request.new_mdp
-    # Vérification de la présence de l'utilisateur
-    db_utilisateur = get_utilisateur(db, pseudo)
-    if not db_utilisateur:
-        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-    
-    # Vérification de l'ancien mot de passe
-    if not (verifier_mdp(ancien_mdp,db_utilisateur.mot_de_passe)):
-        raise HTTPException(status_code=401, detail="L'ancien mot de passe est incorrect")
-
-    # Vérification du nouveau mot de passe
-    if not new_mdp.strip():
-        raise HTTPException(status_code=400, detail="Le nouveau mot de passe ne peut pas être vide")
+# Admin logic
+def is_admin(
+        pseudo: str,
+        db: Session
+        ) -> bool:
     
     try:
-        # Mise à jour du mot de passe
-        db_utilisateur.mot_de_passe = get_mdp_hashe(new_mdp)
-        db.commit()
-        return {"message": f"Mot de passe de '{pseudo}' modifié avec succès."}
-    except Exception:
-        db.rollback()
-        raise HTTPException(status_code=500, detail="Erreur interne, veuillez réessayer plus tard.")
+        user = get_utilisateur(db, pseudo)
+        
+        if not user:
+            return False
+        
+        if user.est_admin:
+            return True
+        else :
+            raise HTTPException(status_code=403, detail="Accès restreint : vous n'êtes pas administrateur")
+    
+    except Exception as e:
+        raise e
+    
 
 # Define password hash verification
 def verifier_mdp(plain_password, mot_de_passe):
@@ -299,6 +216,150 @@ async def get_utilisateur_courant(token: Annotated[str, Depends(oauth2_scheme)],
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials"
         )
+
+# Utilisateur Routes
+@app.post('/utilisateurs/', response_model=UtilisateurModele)
+async def creer_utilisateur(utilisateur: UtilisateurBase, db: Session = Depends(get_db)):
+    try:
+        utilisateur.mot_de_passe = get_mdp_hashe(utilisateur.mot_de_passe)
+        db_utilisateur = models.Utilisateur(
+            pseudo=utilisateur.pseudo,
+            mot_de_passe=utilisateur.mot_de_passe,
+            nom=utilisateur.nom,
+            prenom=utilisateur.prenom,
+            courriel=utilisateur.courriel,
+            est_admin=utilisateur.est_admin,
+            numCours=utilisateur.numCours,
+            tempsTotal=utilisateur.tempsTotal,
+            cptDefi=0  # Valeur par défaut pour cptDefi
+            )
+        db.add(db_utilisateur)
+        db.commit()
+        db.refresh(db_utilisateur)
+        return db_utilisateur
+    except Exception as e:
+        db.rollback()  # Rollback the transaction if an error occurs
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get('/utilisateurs/', response_model=List[UtilisateurRenvoye])
+async def lire_utilisateurs(
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
+    db: Session = Depends(get_db),
+    skip: int = 0,
+    limit: int = 100):
+    try:
+        if is_admin(current_user.pseudo, db):
+            utilisateurs = db.query(models.Utilisateur).offset(skip).limit(limit).all()
+            if not utilisateurs:
+                return Response(status_code=204)
+            valUtilisateurs = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom, cptDefi=user.cptDefi) for user in utilisateurs]
+            return valUtilisateurs
+        
+    except HTTPException as e:
+        raise e
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching users: {str(e)}")
+
+@app.delete('/utilisateurs/{pseudo}', response_model=dict)
+async def supprimer_utilisateur(
+    pseudo: str,
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
+    db: Session = Depends(get_db),
+    ):
+    if is_admin(current_user.pseudo, db):
+        db_utilisateur = get_utilisateur(db, pseudo)
+        if not db_utilisateur:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        
+        db.delete(db_utilisateur)
+        db.commit()
+        return {"message": f"Utilisateur '{pseudo}' supprimé avec succès."}
+        
+@app.get('/utilisateur/{pseudo}', response_model=UtilisateurRenvoye)
+async def  lire_utilisateur(
+    pseudo: str,
+    db: Session = Depends(get_db)
+):
+    try:
+        utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
+        if not utilisateur:
+            return Response(status_code=204)
+        
+        utilisateur_renvoye = UtilisateurRenvoye(pseudo=utilisateur.pseudo, nom=utilisateur.nom, prenom=utilisateur.prenom)
+
+        return utilisateur_renvoye
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération de l'utilisateur : {str(e)}")
+
+@app.get('/utilisateur_full/{pseudo}', response_model=UtilisateurModele)
+async def lire_utilisateur_full(
+    pseudo: str,
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
+    db: Session = Depends(get_db),
+    ):
+    try :
+        if is_admin(current_user.pseudo, db):
+            try:
+                utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
+                if not utilisateur:
+                    return Response(status_code=204)
+                return utilisateur
+            
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération de l'utilisateur : {str(e)}")
+    except Exception as e:
+        raise e
+
+
+@app.put('/utilisateurs/{pseudo}/cptDefi', response_model=UtilisateurModele)
+async def mettre_a_jour_cpt_defi(
+    pseudo: str,
+    update_request: UpdateCptDefiRequest,  # Validation avec Pydantic
+    db: Session = Depends(get_db)  # Injection de la session DB
+):
+    try:
+        # Rechercher l'utilisateur dans la base de données
+        utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
+        if not utilisateur:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+
+        # Mettre à jour le champ `cptDefi`
+        utilisateur.cptDefi = update_request.cptDefi
+        db.commit()
+        db.refresh(utilisateur)  # Recharger les données mises à jour depuis la DB
+        return utilisateur
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour de cptDefi : {str(e)}")
+
+
+@app.patch("/modification_mdp")
+async def modifier_mdp(request: PasswordChangeRequest, db: Session = Depends(get_db)):
+    pseudo = request.pseudo
+    ancien_mdp = request.ancien_mdp
+    new_mdp = request.new_mdp
+    # Vérification de la présence de l'utilisateur
+    db_utilisateur = get_utilisateur(db, pseudo)
+    if not db_utilisateur:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+    
+    # Vérification de l'ancien mot de passe
+    if not (verifier_mdp(ancien_mdp,db_utilisateur.mot_de_passe)):
+        raise HTTPException(status_code=401, detail="L'ancien mot de passe est incorrect")
+
+    # Vérification du nouveau mot de passe
+    if not new_mdp.strip():
+        raise HTTPException(status_code=400, detail="Le nouveau mot de passe ne peut pas être vide")
+    
+    try:
+        # Mise à jour du mot de passe
+        db_utilisateur.mot_de_passe = get_mdp_hashe(new_mdp)
+        db.commit()
+        return {"message": f"Mot de passe de '{pseudo}' modifié avec succès."}
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Erreur interne, veuillez réessayer plus tard.")
 
 #/default/lire_utilisateurs_utilisateurs__get
 # Token endpoint
@@ -376,13 +437,13 @@ async def supprimer_defi(id_defi: int, db: Session = Depends(get_db)):
 @app.post('/reussites_defi/', response_model=UtilisateurDefiModele)
 async def ajout_reussite_defi(
     id_defi: int,  # ID du défi (passé en paramètre de la requête)
-    pseudo_utilisateur: str,  # Pseudo de l'utilisateur (passé en paramètre de la requête)
     temps_reussite: float,  # Temps de réussite du défi
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
     db: Session = Depends(get_db)  # Dépendance pour obtenir la session de base de données
 ):
     try:
         # Vérifier si l'utilisateur existe dans la base de données
-        db_utilisateur = get_utilisateur(db, pseudo_utilisateur)
+        db_utilisateur = get_utilisateur(db, current_user.pseudo)
 
         # Vérifier si le défi existe dans la base de données
         db_defi = db.query(models.Defi).filter(models.Defi.id_defi == id_defi).first()
@@ -390,7 +451,7 @@ async def ajout_reussite_defi(
             raise HTTPException(status_code=404, detail="Défi non trouvé")
     
         db_utilisateur_defi = models.UtilisateurDefi(
-            pseudo_utilisateur=pseudo_utilisateur,
+            pseudo_utilisateur=current_user.pseudo,
             id_defi=id_defi,
             temps_reussite=temps_reussite,
             date_reussite=datetime.now()  # Définir la date de réussite à l'heure actuelle
