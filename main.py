@@ -147,109 +147,26 @@ def get_utilisateur(db, pseudo: str):
         return utilisateur
     return None
 
-# Utilisateur Routes
-@app.post('/utilisateurs/', response_model=UtilisateurModele)
-async def creer_utilisateur(utilisateur: UtilisateurBase, db: Session = Depends(get_db)):
-    try:
-        utilisateur.mot_de_passe = get_mdp_hashe(utilisateur.mot_de_passe)
-        db_utilisateur = models.Utilisateur(
-            pseudo=utilisateur.pseudo,
-            mot_de_passe=utilisateur.mot_de_passe,
-            nom=utilisateur.nom,
-            prenom=utilisateur.prenom,
-            courriel=utilisateur.courriel,
-            est_admin=utilisateur.est_admin,
-            numCours=utilisateur.numCours,
-            tempsTotal=utilisateur.tempsTotal,
-            cptDefi=0  # Valeur par défaut pour cptDefi
-            )
-        db.add(db_utilisateur)
-        db.commit()
-        db.refresh(db_utilisateur)
-        return db_utilisateur
-    except Exception as e:
-        db.rollback()  # Rollback the transaction if an error occurs
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get('/utilisateurs/', response_model=List[UtilisateurRenvoye])
-async def lire_utilisateurs(db: Session = Depends(get_db), skip: int = 0, limit: int = 100):
-    try:
-        utilisateurs = db.query(models.Utilisateur).offset(skip).limit(limit).all()
-        if not utilisateurs:
-            return Response(status_code=204)
-        valUtilisateurs = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom, cptDefi=user.cptDefi) for user in utilisateurs]
-        return valUtilisateurs
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching users: {str(e)}")
-
-@app.delete('/utilisateurs/{pseudo}', response_model=dict)
-async def supprimer_utilisateur(pseudo: str, db: Session = Depends(get_db)):
-    db_utilisateur = get_utilisateur(db, pseudo)
-    if not db_utilisateur:
-        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-    
-    db.delete(db_utilisateur)
-    db.commit()
-    return {"message": f"Utilisateur '{pseudo}' supprimé avec succès."}
-
-@app.get('/utilisateurs/{pseudo}', response_model=UtilisateurModele)
-async def lire_utilisateur(pseudo: str, db: Session = Depends(get_db)):
-    try:
-        utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
-        if not utilisateur:
-            return Response(status_code=204)
-        return utilisateur
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération de l'utilisateur : {str(e)}")
-
-
-@app.put('/utilisateurs/{pseudo}/cptDefi', response_model=UtilisateurModele)
-async def mettre_a_jour_cpt_defi(
-    pseudo: str,
-    update_request: UpdateCptDefiRequest,  # Validation avec Pydantic
-    db: Session = Depends(get_db)  # Injection de la session DB
-):
-    try:
-        # Rechercher l'utilisateur dans la base de données
-        utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
-        if not utilisateur:
-            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-
-        # Mettre à jour le champ `cptDefi`
-        utilisateur.cptDefi = update_request.cptDefi
-        db.commit()
-        db.refresh(utilisateur)  # Recharger les données mises à jour depuis la DB
-        return utilisateur
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour de cptDefi : {str(e)}")
-
-
-@app.patch("/modification_mdp")
-async def modifier_mdp(request: PasswordChangeRequest, db: Session = Depends(get_db)):
-    pseudo = request.pseudo
-    ancien_mdp = request.ancien_mdp
-    new_mdp = request.new_mdp
-    # Vérification de la présence de l'utilisateur
-    db_utilisateur = get_utilisateur(db, pseudo)
-    if not db_utilisateur:
-        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-    
-    # Vérification de l'ancien mot de passe
-    if not (verifier_mdp(ancien_mdp,db_utilisateur.mot_de_passe)):
-        raise HTTPException(status_code=401, detail="L'ancien mot de passe est incorrect")
-
-    # Vérification du nouveau mot de passe
-    if not new_mdp.strip():
-        raise HTTPException(status_code=400, detail="Le nouveau mot de passe ne peut pas être vide")
+# Admin logic
+def is_admin(
+        pseudo: str,
+        db: Session
+        ) -> bool:
     
     try:
-        # Mise à jour du mot de passe
-        db_utilisateur.mot_de_passe = get_mdp_hashe(new_mdp)
-        db.commit()
-        return {"message": f"Mot de passe de '{pseudo}' modifié avec succès."}
-    except Exception:
-        db.rollback()
-        raise HTTPException(status_code=500, detail="Erreur interne, veuillez réessayer plus tard.")
+        user = get_utilisateur(db, pseudo)
+        
+        if not user:
+            return False
+        
+        if user.est_admin:
+            return True
+        else :
+            raise HTTPException(status_code=403, detail="Accès restreint : vous n'êtes pas administrateur")
+    
+    except Exception as e:
+        raise e
+    
 
 # Define password hash verification
 def verifier_mdp(plain_password, mot_de_passe):
@@ -299,6 +216,150 @@ async def get_utilisateur_courant(token: Annotated[str, Depends(oauth2_scheme)],
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials"
         )
+
+# Utilisateur Routes
+@app.post('/utilisateurs/', response_model=UtilisateurModele)
+async def creer_utilisateur(utilisateur: UtilisateurBase, db: Session = Depends(get_db)):
+    try:
+        utilisateur.mot_de_passe = get_mdp_hashe(utilisateur.mot_de_passe)
+        db_utilisateur = models.Utilisateur(
+            pseudo=utilisateur.pseudo,
+            mot_de_passe=utilisateur.mot_de_passe,
+            nom=utilisateur.nom,
+            prenom=utilisateur.prenom,
+            courriel=utilisateur.courriel,
+            est_admin=utilisateur.est_admin,
+            numCours=utilisateur.numCours,
+            tempsTotal=utilisateur.tempsTotal,
+            cptDefi=0  # Valeur par défaut pour cptDefi
+            )
+        db.add(db_utilisateur)
+        db.commit()
+        db.refresh(db_utilisateur)
+        return db_utilisateur
+    except Exception as e:
+        db.rollback()  # Rollback the transaction if an error occurs
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get('/utilisateurs/', response_model=List[UtilisateurRenvoye])
+async def lire_utilisateurs(
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
+    db: Session = Depends(get_db),
+    skip: int = 0,
+    limit: int = 100):
+    try:
+        if is_admin(current_user.pseudo, db):
+            utilisateurs = db.query(models.Utilisateur).offset(skip).limit(limit).all()
+            if not utilisateurs:
+                return Response(status_code=204)
+            valUtilisateurs = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom, cptDefi=user.cptDefi) for user in utilisateurs]
+            return valUtilisateurs
+        
+    except HTTPException as e:
+        raise e
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching users: {str(e)}")
+
+@app.delete('/utilisateurs/{pseudo}', response_model=dict)
+async def supprimer_utilisateur(
+    pseudo: str,
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
+    db: Session = Depends(get_db),
+    ):
+    if is_admin(current_user.pseudo, db):
+        db_utilisateur = get_utilisateur(db, pseudo)
+        if not db_utilisateur:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        
+        db.delete(db_utilisateur)
+        db.commit()
+        return {"message": f"Utilisateur '{pseudo}' supprimé avec succès."}
+        
+@app.get('/utilisateur/{pseudo}', response_model=UtilisateurRenvoye)
+async def  lire_utilisateur(
+    pseudo: str,
+    db: Session = Depends(get_db)
+):
+    try:
+        utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
+        if not utilisateur:
+            return Response(status_code=204)
+        
+        utilisateur_renvoye = UtilisateurRenvoye(pseudo=utilisateur.pseudo, nom=utilisateur.nom, prenom=utilisateur.prenom)
+
+        return utilisateur_renvoye
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération de l'utilisateur : {str(e)}")
+
+@app.get('/utilisateur_full/{pseudo}', response_model=UtilisateurModele)
+async def lire_utilisateur_full(
+    pseudo: str,
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
+    db: Session = Depends(get_db),
+    ):
+    try :
+        if is_admin(current_user.pseudo, db):
+            try:
+                utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
+                if not utilisateur:
+                    return Response(status_code=204)
+                return utilisateur
+            
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération de l'utilisateur : {str(e)}")
+    except Exception as e:
+        raise e
+
+
+@app.put('/utilisateurs/{pseudo}/cptDefi', response_model=UtilisateurModele)
+async def mettre_a_jour_cpt_defi(
+    pseudo: str,
+    update_request: UpdateCptDefiRequest,  # Validation avec Pydantic
+    db: Session = Depends(get_db)  # Injection de la session DB
+):
+    try:
+        # Rechercher l'utilisateur dans la base de données
+        utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
+        if not utilisateur:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+
+        # Mettre à jour le champ `cptDefi`
+        utilisateur.cptDefi = update_request.cptDefi
+        db.commit()
+        db.refresh(utilisateur)  # Recharger les données mises à jour depuis la DB
+        return utilisateur
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour de cptDefi : {str(e)}")
+
+
+@app.patch("/modification_mdp")
+async def modifier_mdp(request: PasswordChangeRequest, db: Session = Depends(get_db)):
+    pseudo = request.pseudo
+    ancien_mdp = request.ancien_mdp
+    new_mdp = request.new_mdp
+    # Vérification de la présence de l'utilisateur
+    db_utilisateur = get_utilisateur(db, pseudo)
+    if not db_utilisateur:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+    
+    # Vérification de l'ancien mot de passe
+    if not (verifier_mdp(ancien_mdp,db_utilisateur.mot_de_passe)):
+        raise HTTPException(status_code=401, detail="L'ancien mot de passe est incorrect")
+
+    # Vérification du nouveau mot de passe
+    if not new_mdp.strip():
+        raise HTTPException(status_code=400, detail="Le nouveau mot de passe ne peut pas être vide")
+    
+    try:
+        # Mise à jour du mot de passe
+        db_utilisateur.mot_de_passe = get_mdp_hashe(new_mdp)
+        db.commit()
+        return {"message": f"Mot de passe de '{pseudo}' modifié avec succès."}
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Erreur interne, veuillez réessayer plus tard.")
 
 #/default/lire_utilisateurs_utilisateurs__get
 # Token endpoint
@@ -376,13 +437,13 @@ async def supprimer_defi(id_defi: int, db: Session = Depends(get_db)):
 @app.post('/reussites_defi/', response_model=UtilisateurDefiModele)
 async def ajout_reussite_defi(
     id_defi: int,  # ID du défi (passé en paramètre de la requête)
-    pseudo_utilisateur: str,  # Pseudo de l'utilisateur (passé en paramètre de la requête)
     temps_reussite: float,  # Temps de réussite du défi
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
     db: Session = Depends(get_db)  # Dépendance pour obtenir la session de base de données
 ):
     try:
         # Vérifier si l'utilisateur existe dans la base de données
-        db_utilisateur = get_utilisateur(db, pseudo_utilisateur)
+        db_utilisateur = get_utilisateur(db, current_user.pseudo)
 
         # Vérifier si le défi existe dans la base de données
         db_defi = db.query(models.Defi).filter(models.Defi.id_defi == id_defi).first()
@@ -390,7 +451,7 @@ async def ajout_reussite_defi(
             raise HTTPException(status_code=404, detail="Défi non trouvé")
     
         db_utilisateur_defi = models.UtilisateurDefi(
-            pseudo_utilisateur=pseudo_utilisateur,
+            pseudo_utilisateur=current_user.pseudo,
             id_defi=id_defi,
             temps_reussite=temps_reussite,
             date_reussite=datetime.now()  # Définir la date de réussite à l'heure actuelle
@@ -806,40 +867,55 @@ async def supprimer_groupe(id_groupe: int, db: Session = Depends(get_db)):
 async def ajout_membre_classe(
     id_groupe : int,  # ID du groupe (passé en paramètre de la requête)
     pseudo_utilisateur: str,  # Pseudo de l'utilisateur (passé en paramètre de la requête)
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
     est_admin : bool,  # booleen pour definir l'admin du groupe
     db: Session = Depends(get_db)  # Dépendance pour obtenir la session de base de données
 ):
     try:
-        # Vérifier si l'utilisateur existe dans la base de données
-        db_utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo_utilisateur).first()
-        if not db_utilisateur:
-            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-        
-        # Vérifier si le défi existe dans la base de données
-        db_groupe = db.query(models.Groupe).filter(models.Groupe.id_groupe == id_groupe).first()
-        if not db_groupe:
-            raise HTTPException(status_code=404, detail="Groupe non trouvé")
-        
-        # Vérifier si l'utilisateur appartient deja à ce groupe
-        existing_reussite = db.query(models.UtilisateurGroupe).filter(
-            models.UtilisateurGroupe.pseudo_utilisateur == pseudo_utilisateur,
-            models.UtilisateurGroupe.id_groupe == id_groupe
+        # Vérifier si l'utilisateur est admin de la classe ou éssaie de s'ajouter eux-même
+        admin_of_class = db.query(models.UtilisateurGroupe).filter(
+            (models.UtilisateurGroupe.est_admin == True) & 
+            (models.UtilisateurGroupe.pseudo_utilisateur == current_user.pseudo) & 
+            (models.UtilisateurGroupe.id_groupe == id_groupe)
         ).first()
 
-        if existing_reussite:
-            # Si l'utilisateur appartient à ce groupe
-            return existing_reussite  # Voir quelle action effectuer ici
+        if (admin_of_class or current_user.pseudo == pseudo_utilisateur):
+
+            # Vérifier si l'utilisateur existe dans la base de données
+            db_utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo_utilisateur).first()
+            if not db_utilisateur:
+                raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+            
+            # Vérifier si le défi existe dans la base de données
+            db_groupe = db.query(models.Groupe).filter(models.Groupe.id_groupe == id_groupe).first()
+            if not db_groupe:
+                raise HTTPException(status_code=404, detail="Groupe non trouvé")
+            
+            # Vérifier si l'utilisateur appartient deja à ce groupe
+            existing_reussite = db.query(models.UtilisateurGroupe).filter(
+                models.UtilisateurGroupe.pseudo_utilisateur == pseudo_utilisateur,
+                models.UtilisateurGroupe.id_groupe == id_groupe
+            ).first()
+
+            if existing_reussite:
+                # Si l'utilisateur appartient à ce groupe
+                return existing_reussite  # Voir quelle action effectuer ici
+            else:
+                # Si l'utilisateur n'appartient pas a ce groupe, l'ajouter au groupe
+                db_utilisateur_groupe = models.UtilisateurGroupe(
+                    pseudo_utilisateur=pseudo_utilisateur,
+                    id_groupe=id_groupe,
+                    est_admin=est_admin,
+                )
+                db.add(db_utilisateur_groupe)  # Ajouter la nouvelle réussite dans la base de données
+                db.commit()  # Commit les changements
+                db.refresh(db_utilisateur_groupe)  # Rafraîchir l'instance pour obtenir les données mises à jour
+                return db_utilisateur_groupe  # Retourner la nouvelle réussite ajoutée
         else:
-            # Si l'utilisateur n'appartient pas a ce groupe, l'ajouter au groupe
-            db_utilisateur_groupe = models.UtilisateurGroupe(
-                pseudo_utilisateur=pseudo_utilisateur,
-                id_groupe=id_groupe,
-                est_admin=est_admin,
-            )
-            db.add(db_utilisateur_groupe)  # Ajouter la nouvelle réussite dans la base de données
-            db.commit()  # Commit les changements
-            db.refresh(db_utilisateur_groupe)  # Rafraîchir l'instance pour obtenir les données mises à jour
-            return db_utilisateur_groupe  # Retourner la nouvelle réussite ajoutée
+            raise HTTPException(status_code=403, detail="Vous n'avez pas la permission d'ajouter cet utilisateur à cette classe")
+    
+    except HTTPException as e:
+        raise e
     
     except Exception as e:
         # Si une erreur se produit, annuler la transaction et retourner un message d'erreur
@@ -847,39 +923,50 @@ async def ajout_membre_classe(
         raise HTTPException(status_code=500, detail=f"Erreur lors de l'ajout de la réussite du défi : {str(e)}")
 
 
-@app.get('/admins_par_groupe/', response_model=List[UtilisateurRenvoye])
+@app.get('/admins_par_groupe/{id_groupe}', response_model=List[UtilisateurRenvoye])
 async def lire_admin_groupe(
     id_groupe: int,
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
     db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
     skip: int = 0,  # Paramètre optionnel pour le décalage (pagination)
     limit: int = 100  # Paramètre optionnel pour la limite du nombre de résultats
 ):
     try:
-        # Récupérer les utilisateurs du groupe qui sont des administrateurs
-        pseudo_admins = db.query(models.UtilisateurGroupe).filter(
-            (models.UtilisateurGroupe.id_groupe == id_groupe) & 
-            (models.UtilisateurGroupe.est_admin == True)
-        ).offset(skip).limit(limit).all()
+        # Ne retourner les infos uniquement si l'utilisateur fait lui même parti de cette classe
+        membre_groupe = db.query(models.UtilisateurGroupe).filter(
+            (models.UtilisateurGroupe.pseudo_utilisateur == current_user.pseudo) &
+            (models.UtilisateurGroupe.id_groupe == id_groupe)
+            ).first()
         
-        if not pseudo_admins:
-            raise HTTPException(status_code=404, detail=f"Aucun administrateur dans la classe : {id_groupe}")
+        if not membre_groupe:
+            raise HTTPException(status_code=403, detail="Accès restreint : vous ne faites pas parti de cette classe")
         
-        # Récupérer les informations des administrateurs
-        db_admins = db.query(models.Utilisateur).join(
-            models.UtilisateurGroupe, 
-            models.Utilisateur.pseudo == models.UtilisateurGroupe.pseudo_utilisateur
-        ).filter(
-            models.UtilisateurGroupe.id_groupe == id_groupe, 
-            models.UtilisateurGroupe.est_admin == True
-        ).offset(skip).limit(limit).all()
-        
-        if not db_admins:
-            raise HTTPException(status_code=404, detail="Aucune information trouvée pour les administrateurs")
-        
-        # Retourner les informations des administrateurs sous forme de liste d'objets UtilisateurRenvoye
-        infos_admins = [UtilisateurRenvoye(pseudo=admin.pseudo, nom=admin.nom, prenom=admin.prenom) for admin in db_admins]
-        
-        return infos_admins
+        else :
+            # Récupérer les utilisateurs du groupe qui sont des administrateurs
+            pseudo_admins = db.query(models.UtilisateurGroupe).filter(
+                (models.UtilisateurGroupe.id_groupe == id_groupe) & 
+                (models.UtilisateurGroupe.est_admin == True)
+            ).offset(skip).limit(limit).all()
+            
+            if not pseudo_admins:
+                raise HTTPException(status_code=404, detail=f"Aucun administrateur dans la classe : {id_groupe}")
+            
+            # Récupérer les informations des administrateurs
+            db_admins = db.query(models.Utilisateur).join(
+                models.UtilisateurGroupe, 
+                models.Utilisateur.pseudo == models.UtilisateurGroupe.pseudo_utilisateur
+            ).filter(
+                models.UtilisateurGroupe.id_groupe == id_groupe, 
+                models.UtilisateurGroupe.est_admin == True
+            ).offset(skip).limit(limit).all()
+            
+            if not db_admins:
+                raise HTTPException(status_code=404, detail="Aucune information trouvée pour les administrateurs")
+            
+            # Retourner les informations des administrateurs sous forme de liste d'objets UtilisateurRenvoye
+            infos_admins = [UtilisateurRenvoye(pseudo=admin.pseudo, nom=admin.nom, prenom=admin.prenom) for admin in db_admins]
+            
+            return infos_admins
     
     except HTTPException as e:
         raise e
@@ -903,32 +990,40 @@ def get_admin_count(
 @app.get('/membre_classe_par_groupe/{id_groupe}', response_model=List[UtilisateurRenvoye])
 async def lire_tous_les_membres_classe(
     id_groupe: int,
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
     db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
     skip: int = 0,  # Paramètre optionnel pour le décalage (pagination)
     limit: int = 100  # Paramètre optionnel pour la limite du nombre de résultats
 ):
     try:
-        # Récupérer les relations entre groupes et utilisateurs pour un groupe spécifique
-        membres_classe = db.query(models.UtilisateurGroupe).filter(models.UtilisateurGroupe.id_groupe == id_groupe).offset(skip).limit(limit).all()
+        # Ne retourner les infos uniquement si l'utilisateur fait lui même parti de cette classe
+        membre_groupe = db.query(models.UtilisateurGroupe).filter(
+            (models.UtilisateurGroupe.pseudo_utilisateur == current_user.pseudo) & 
+            (models.UtilisateurGroupe.id_groupe == id_groupe)
+            ).first()
+        
+        if not membre_groupe:
+            raise HTTPException(status_code=403, detail="Accès restreint : vous ne faites pas parti de cette classe")
+        else :
+            # Récupérer les relations entre groupes et utilisateurs pour un groupe spécifique
+            membres_classe = db.query(models.UtilisateurGroupe).filter(
+                (models.UtilisateurGroupe.id_groupe == id_groupe) &
+                (models.UtilisateurGroupe.est_admin == False)
+                ).offset(skip).limit(limit).all()
 
-        if not membres_classe:
-            raise HTTPException(status_code=404, detail="Aucune relation groupe-utilisateur trouvée.")
+            if not membres_classe:
+                return Response(status_code=204)
 
-        # Extraire les pseudos des membres
-        pseudos_membres = [membre.pseudo_utilisateur for membre in membres_classe]
+            # Extraire les pseudos des membres
+            pseudos_membres = [membre.pseudo_utilisateur for membre in membres_classe]
 
-        # Récupérer les informations des utilisateurs (modèle Utilisateur) en fonction des pseudos
-        utilisateurs = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo.in_(pseudos_membres)).all()
+            # Récupérer les informations des utilisateurs (modèle Utilisateur) en fonction des pseudos
+            utilisateurs = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo.in_(pseudos_membres)).all()
 
-        # Convertir les utilisateurs en objets UtilisateurRenvoye
-        utilisateurs_renvoyes = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom) for user in utilisateurs]
+            # Convertir les utilisateurs en objets UtilisateurRenvoye
+            utilisateurs_renvoyes = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom) for user in utilisateurs]
 
-        return utilisateurs_renvoyes
-
-        if not utilisateurs:
-            raise HTTPException(status_code=404, detail="Aucun utilisateur trouvé pour ce groupe.")
-
-        return utilisateurs
+            return utilisateurs_renvoyes
     
     except HTTPException as e:
         raise e
@@ -936,6 +1031,92 @@ async def lire_tous_les_membres_classe(
     except Exception as e:
         # Gestion des erreurs
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des relations groupe-utilisateur : {str(e)}")
+    
+@app.get('/membre_est_admin/{id_groupe}', response_model=bool)
+async def verifier_admin_classe(
+    id_groupe: int,  # ID du groupe à vérifier
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
+    db: Session = Depends(get_db)
+):
+    try:
+        # Vérifier si l'utilisateur courant est admin de la classe
+        lien_utilisateur_courant_classe = db.query(models.UtilisateurGroupe).filter(
+            models.UtilisateurGroupe.id_groupe == id_groupe,
+            models.UtilisateurGroupe.pseudo_utilisateur == current_user.pseudo,
+            models.UtilisateurGroupe.est_admin == True
+        ).first()
+        if lien_utilisateur_courant_classe:
+            return True
+        else:
+            return False
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la vérification du statut administrateur : {str(e)}")
+    
+@app.patch('/admin_classe/', response_model=dict)
+async def changer_admin_classe(
+    id_groupe: int,  # ID du groupe à donner
+    pseudo_utilisateur: str,  # Pseudo de l'utilisateur à promouvoir/démouvoir
+    est_admin: bool,  # Booléen pour promouvoir/démouvoir l'utilisateur
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
+    db: Session = Depends(get_db)
+):
+    try:
+        #Vérifier si l'utilisateur change son propre statut
+        if pseudo_utilisateur == current_user.pseudo:
+            raise HTTPException(status_code=403, detail="Vous ne pouvez pas changer votre propre statut administrateur")
+        
+        # Vérifier si l'utilisateur courant est admin de la classe
+        lien_utilisateur_courant_classe = db.query(models.UtilisateurGroupe).filter(
+            models.UtilisateurGroupe.id_groupe == id_groupe,
+            models.UtilisateurGroupe.pseudo_utilisateur == current_user.pseudo,
+            models.UtilisateurGroupe.est_admin == True
+        ).first()
+        if not lien_utilisateur_courant_classe:
+            raise HTTPException(status_code=403, detail="Accès refusé : Vous devez être administrateur de cette classe")
+
+        # Vérifier si l'utilisateur à promouvoir/démouvoir existe et est dans la classe
+        utilisateur = get_utilisateur(db, pseudo_utilisateur)
+        if not utilisateur:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        
+        lien_utilisateur_classe = db.query(models.UtilisateurGroupe).filter(
+            models.UtilisateurGroupe.id_groupe == id_groupe,
+            models.UtilisateurGroupe.pseudo_utilisateur == pseudo_utilisateur
+        ).first()
+        if not lien_utilisateur_classe:
+            raise HTTPException(status_code=404, detail="L'utilisateur n'est pas membre de cette classe")
+
+        if est_admin:
+            # Cas 1 : Promouvoir l'utilisateur en tant qu'administrateur
+            # Vérifier si l'utilisateur est déjà administrateur
+            if lien_utilisateur_classe.est_admin:
+                return {"message": f"L'utilisateur '{pseudo_utilisateur}' est déjà administrateur de la classe"}
+            
+            # Promouvoir l'utilisateur en tant qu'administrateur
+            lien_utilisateur_classe.est_admin = est_admin
+            db.commit()
+
+            return {"message": f"Utilisateur '{pseudo_utilisateur}' promu administrateur de la classe"}
+        
+        else:
+            # Cas 2 : Démouvoir l'administrateur
+            # Vérifier si l'utilisateur est déjà un membre normal
+            if not lien_utilisateur_classe.est_admin:
+                return {"message": f"L'utilisateur '{pseudo_utilisateur}' est déjà un membre normal de la classe"}
+            
+            # Démouvoir l'administrateur
+            lien_utilisateur_classe.est_admin = est_admin
+            db.commit()
+
+            return {"message": f"Statut administrateur mis à jour pour l'utilisateur '{pseudo_utilisateur}'"}
+
+    except HTTPException as e:
+        raise e
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour du statut administrateur : {str(e)}")
 
 @app.get('/membre_classe/{pseudo_utilisateur}', response_model=UtilisateurGroupeModele)
 async def lire_groupes_d_utilisateur(
@@ -981,34 +1162,45 @@ async def lire_classes_utilisateur(pseudo_utilisateur: str, db: Session = Depend
 async def supprimer_relation_utilisateur_groupe(
     id_groupe: int,  # ID du groupe à supprimer
     pseudo_utilisateur: str,  # Pseudo de l'utilisateur dont on veut supprimer la relation
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
     db: Session = Depends(get_db)  # Dépendance pour obtenir la session de base de données
 ):
     try:
-        # Chercher la relation entre l'utilisateur et le groupe
-        relation = db.query(models.UtilisateurGroupe).filter(
-            models.UtilisateurGroupe.id_groupe == id_groupe,
-            models.UtilisateurGroupe.pseudo_utilisateur == pseudo_utilisateur
+        # Vérifie que la requête est soit appelée par un admin de la classe, soit par l'utilisateur concerné
+        admin_of_class = db.query(models.UtilisateurGroupe).filter(
+            (models.UtilisateurGroupe.id_groupe == id_groupe) &
+            (models.UtilisateurGroupe.pseudo_utilisateur == current_user.pseudo) &
+            (models.UtilisateurGroupe.est_admin == True)
         ).first()
-        
-        # Vérifier si la relation existe
-        if not relation:
-            raise HTTPException(status_code=404, detail="L'utilisateur n'est pas membre de cette classe")
-        
-        # Supprimer la relation utilisateur-groupe
-        db.delete(relation)
-        db.commit()  # Commit après suppression de la relation
-        
-        # Vérifier le nombre d'administrateurs restants dans le groupe
-        admin_count = get_admin_count(id_groupe=id_groupe, db=db)
-        
-        if admin_count <= 0:
-            groupe = db.query(models.Groupe).filter(models.Groupe.id_groupe == id_groupe).first()
-            if groupe:
-                db.delete(groupe)  # Supprimer le groupe si plus d'administrateurs
-                db.commit()  # Commit après suppression du groupe
-        
-        # Retourner une réponse avec statut 200 OK
-        return {"detail": "Relation supprimée avec succès."}
+
+        if admin_of_class or pseudo_utilisateur == current_user.pseudo:
+            # Chercher la relation entre l'utilisateur et le groupe
+            relation = db.query(models.UtilisateurGroupe).filter(
+                models.UtilisateurGroupe.id_groupe == id_groupe,
+                models.UtilisateurGroupe.pseudo_utilisateur == pseudo_utilisateur
+            ).first()
+            
+            # Vérifier si la relation existe
+            if not relation:
+                raise HTTPException(status_code=404, detail="L'utilisateur n'est pas membre de cette classe")
+            
+            # Supprimer la relation utilisateur-groupe
+            db.delete(relation)
+            db.commit()  # Commit après suppression de la relation
+            
+            # Vérifier le nombre d'administrateurs restants dans le groupe
+            admin_count = get_admin_count(id_groupe=id_groupe, db=db)
+            
+            if admin_count <= 0:
+                groupe = db.query(models.Groupe).filter(models.Groupe.id_groupe == id_groupe).first()
+                if groupe:
+                    db.delete(groupe)  # Supprimer le groupe si plus d'administrateurs
+                    db.commit()  # Commit après suppression du groupe
+            
+            # Retourner une réponse avec statut 200 OK
+            return {"detail": "Relation supprimée avec succès."}
+        else:
+            raise HTTPException(status_code=403, detail="Accès restreint: Vous n'avez pas l'authorisation de modifier les informations de cet utilisateur pour cette classe")
     
     except HTTPException as e:
         raise e  # Relever les exceptions HTTP comme 404
