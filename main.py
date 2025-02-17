@@ -867,40 +867,55 @@ async def supprimer_groupe(id_groupe: int, db: Session = Depends(get_db)):
 async def ajout_membre_classe(
     id_groupe : int,  # ID du groupe (passé en paramètre de la requête)
     pseudo_utilisateur: str,  # Pseudo de l'utilisateur (passé en paramètre de la requête)
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
     est_admin : bool,  # booleen pour definir l'admin du groupe
     db: Session = Depends(get_db)  # Dépendance pour obtenir la session de base de données
 ):
     try:
-        # Vérifier si l'utilisateur existe dans la base de données
-        db_utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo_utilisateur).first()
-        if not db_utilisateur:
-            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-        
-        # Vérifier si le défi existe dans la base de données
-        db_groupe = db.query(models.Groupe).filter(models.Groupe.id_groupe == id_groupe).first()
-        if not db_groupe:
-            raise HTTPException(status_code=404, detail="Groupe non trouvé")
-        
-        # Vérifier si l'utilisateur appartient deja à ce groupe
-        existing_reussite = db.query(models.UtilisateurGroupe).filter(
-            models.UtilisateurGroupe.pseudo_utilisateur == pseudo_utilisateur,
-            models.UtilisateurGroupe.id_groupe == id_groupe
+        # Vérifier si l'utilisateur est admin de la classe ou éssaie de s'ajouter eux-même
+        admin_of_class = db.query(models.UtilisateurGroupe).filter(
+            (models.UtilisateurGroupe.est_admin == True) & 
+            (models.UtilisateurGroupe.pseudo_utilisateur == current_user.pseudo) & 
+            (models.UtilisateurGroupe.id_groupe == id_groupe)
         ).first()
 
-        if existing_reussite:
-            # Si l'utilisateur appartient à ce groupe
-            return existing_reussite  # Voir quelle action effectuer ici
+        if (admin_of_class or current_user.pseudo == pseudo_utilisateur):
+
+            # Vérifier si l'utilisateur existe dans la base de données
+            db_utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo_utilisateur).first()
+            if not db_utilisateur:
+                raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+            
+            # Vérifier si le défi existe dans la base de données
+            db_groupe = db.query(models.Groupe).filter(models.Groupe.id_groupe == id_groupe).first()
+            if not db_groupe:
+                raise HTTPException(status_code=404, detail="Groupe non trouvé")
+            
+            # Vérifier si l'utilisateur appartient deja à ce groupe
+            existing_reussite = db.query(models.UtilisateurGroupe).filter(
+                models.UtilisateurGroupe.pseudo_utilisateur == pseudo_utilisateur,
+                models.UtilisateurGroupe.id_groupe == id_groupe
+            ).first()
+
+            if existing_reussite:
+                # Si l'utilisateur appartient à ce groupe
+                return existing_reussite  # Voir quelle action effectuer ici
+            else:
+                # Si l'utilisateur n'appartient pas a ce groupe, l'ajouter au groupe
+                db_utilisateur_groupe = models.UtilisateurGroupe(
+                    pseudo_utilisateur=pseudo_utilisateur,
+                    id_groupe=id_groupe,
+                    est_admin=est_admin,
+                )
+                db.add(db_utilisateur_groupe)  # Ajouter la nouvelle réussite dans la base de données
+                db.commit()  # Commit les changements
+                db.refresh(db_utilisateur_groupe)  # Rafraîchir l'instance pour obtenir les données mises à jour
+                return db_utilisateur_groupe  # Retourner la nouvelle réussite ajoutée
         else:
-            # Si l'utilisateur n'appartient pas a ce groupe, l'ajouter au groupe
-            db_utilisateur_groupe = models.UtilisateurGroupe(
-                pseudo_utilisateur=pseudo_utilisateur,
-                id_groupe=id_groupe,
-                est_admin=est_admin,
-            )
-            db.add(db_utilisateur_groupe)  # Ajouter la nouvelle réussite dans la base de données
-            db.commit()  # Commit les changements
-            db.refresh(db_utilisateur_groupe)  # Rafraîchir l'instance pour obtenir les données mises à jour
-            return db_utilisateur_groupe  # Retourner la nouvelle réussite ajoutée
+            raise HTTPException(status_code=403, detail="Vous n'avez pas la permission d'ajouter cet utilisateur à cette classe")
+    
+    except HTTPException as e:
+        raise e
     
     except Exception as e:
         # Si une erreur se produit, annuler la transaction et retourner un message d'erreur
@@ -911,36 +926,47 @@ async def ajout_membre_classe(
 @app.get('/admins_par_groupe/{id_groupe}', response_model=List[UtilisateurRenvoye])
 async def lire_admin_groupe(
     id_groupe: int,
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
     db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
     skip: int = 0,  # Paramètre optionnel pour le décalage (pagination)
     limit: int = 100  # Paramètre optionnel pour la limite du nombre de résultats
 ):
     try:
-        # Récupérer les utilisateurs du groupe qui sont des administrateurs
-        pseudo_admins = db.query(models.UtilisateurGroupe).filter(
-            (models.UtilisateurGroupe.id_groupe == id_groupe) & 
-            (models.UtilisateurGroupe.est_admin == True)
-        ).offset(skip).limit(limit).all()
+        # Ne retourner les infos uniquement si l'utilisateur fait lui même parti de cette classe
+        membre_groupe = db.query(models.UtilisateurGroupe).filter(
+            (models.UtilisateurGroupe.pseudo_utilisateur == current_user.pseudo) &
+            (models.UtilisateurGroupe.id_groupe == id_groupe)
+            ).first()
         
-        if not pseudo_admins:
-            raise HTTPException(status_code=404, detail=f"Aucun administrateur dans la classe : {id_groupe}")
+        if not membre_groupe:
+            raise HTTPException(status_code=403, detail="Accès restreint : vous ne faites pas parti de cette classe")
         
-        # Récupérer les informations des administrateurs
-        db_admins = db.query(models.Utilisateur).join(
-            models.UtilisateurGroupe, 
-            models.Utilisateur.pseudo == models.UtilisateurGroupe.pseudo_utilisateur
-        ).filter(
-            models.UtilisateurGroupe.id_groupe == id_groupe, 
-            models.UtilisateurGroupe.est_admin == True
-        ).offset(skip).limit(limit).all()
-        
-        if not db_admins:
-            raise HTTPException(status_code=404, detail="Aucune information trouvée pour les administrateurs")
-        
-        # Retourner les informations des administrateurs sous forme de liste d'objets UtilisateurRenvoye
-        infos_admins = [UtilisateurRenvoye(pseudo=admin.pseudo, nom=admin.nom, prenom=admin.prenom) for admin in db_admins]
-        
-        return infos_admins
+        else :
+            # Récupérer les utilisateurs du groupe qui sont des administrateurs
+            pseudo_admins = db.query(models.UtilisateurGroupe).filter(
+                (models.UtilisateurGroupe.id_groupe == id_groupe) & 
+                (models.UtilisateurGroupe.est_admin == True)
+            ).offset(skip).limit(limit).all()
+            
+            if not pseudo_admins:
+                raise HTTPException(status_code=404, detail=f"Aucun administrateur dans la classe : {id_groupe}")
+            
+            # Récupérer les informations des administrateurs
+            db_admins = db.query(models.Utilisateur).join(
+                models.UtilisateurGroupe, 
+                models.Utilisateur.pseudo == models.UtilisateurGroupe.pseudo_utilisateur
+            ).filter(
+                models.UtilisateurGroupe.id_groupe == id_groupe, 
+                models.UtilisateurGroupe.est_admin == True
+            ).offset(skip).limit(limit).all()
+            
+            if not db_admins:
+                raise HTTPException(status_code=404, detail="Aucune information trouvée pour les administrateurs")
+            
+            # Retourner les informations des administrateurs sous forme de liste d'objets UtilisateurRenvoye
+            infos_admins = [UtilisateurRenvoye(pseudo=admin.pseudo, nom=admin.nom, prenom=admin.prenom) for admin in db_admins]
+            
+            return infos_admins
     
     except HTTPException as e:
         raise e
@@ -964,30 +990,40 @@ def get_admin_count(
 @app.get('/membre_classe_par_groupe/{id_groupe}', response_model=List[UtilisateurRenvoye])
 async def lire_tous_les_membres_classe(
     id_groupe: int,
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
     db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
     skip: int = 0,  # Paramètre optionnel pour le décalage (pagination)
     limit: int = 100  # Paramètre optionnel pour la limite du nombre de résultats
 ):
     try:
-        # Récupérer les relations entre groupes et utilisateurs pour un groupe spécifique
-        membres_classe = db.query(models.UtilisateurGroupe).filter(
-            (models.UtilisateurGroupe.id_groupe == id_groupe) &
-            (models.UtilisateurGroupe.est_admin == False)
-            ).offset(skip).limit(limit).all()
+        # Ne retourner les infos uniquement si l'utilisateur fait lui même parti de cette classe
+        membre_groupe = db.query(models.UtilisateurGroupe).filter(
+            (models.UtilisateurGroupe.pseudo_utilisateur == current_user.pseudo) & 
+            (models.UtilisateurGroupe.id_groupe == id_groupe)
+            ).first()
+        
+        if not membre_groupe:
+            raise HTTPException(status_code=403, detail="Accès restreint : vous ne faites pas parti de cette classe")
+        else :
+            # Récupérer les relations entre groupes et utilisateurs pour un groupe spécifique
+            membres_classe = db.query(models.UtilisateurGroupe).filter(
+                (models.UtilisateurGroupe.id_groupe == id_groupe) &
+                (models.UtilisateurGroupe.est_admin == False)
+                ).offset(skip).limit(limit).all()
 
-        if not membres_classe:
-            return Response(status_code=204)
+            if not membres_classe:
+                return Response(status_code=204)
 
-        # Extraire les pseudos des membres
-        pseudos_membres = [membre.pseudo_utilisateur for membre in membres_classe]
+            # Extraire les pseudos des membres
+            pseudos_membres = [membre.pseudo_utilisateur for membre in membres_classe]
 
-        # Récupérer les informations des utilisateurs (modèle Utilisateur) en fonction des pseudos
-        utilisateurs = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo.in_(pseudos_membres)).all()
+            # Récupérer les informations des utilisateurs (modèle Utilisateur) en fonction des pseudos
+            utilisateurs = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo.in_(pseudos_membres)).all()
 
-        # Convertir les utilisateurs en objets UtilisateurRenvoye
-        utilisateurs_renvoyes = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom) for user in utilisateurs]
+            # Convertir les utilisateurs en objets UtilisateurRenvoye
+            utilisateurs_renvoyes = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom) for user in utilisateurs]
 
-        return utilisateurs_renvoyes
+            return utilisateurs_renvoyes
     
     except HTTPException as e:
         raise e
@@ -1126,34 +1162,45 @@ async def lire_classes_utilisateur(pseudo_utilisateur: str, db: Session = Depend
 async def supprimer_relation_utilisateur_groupe(
     id_groupe: int,  # ID du groupe à supprimer
     pseudo_utilisateur: str,  # Pseudo de l'utilisateur dont on veut supprimer la relation
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
     db: Session = Depends(get_db)  # Dépendance pour obtenir la session de base de données
 ):
     try:
-        # Chercher la relation entre l'utilisateur et le groupe
-        relation = db.query(models.UtilisateurGroupe).filter(
-            models.UtilisateurGroupe.id_groupe == id_groupe,
-            models.UtilisateurGroupe.pseudo_utilisateur == pseudo_utilisateur
+        # Vérifie que la requête est soit appelée par un admin de la classe, soit par l'utilisateur concerné
+        admin_of_class = db.query(models.UtilisateurGroupe).filter(
+            (models.UtilisateurGroupe.id_groupe == id_groupe) &
+            (models.UtilisateurGroupe.pseudo_utilisateur == current_user.pseudo) &
+            (models.UtilisateurGroupe.est_admin == True)
         ).first()
-        
-        # Vérifier si la relation existe
-        if not relation:
-            raise HTTPException(status_code=404, detail="L'utilisateur n'est pas membre de cette classe")
-        
-        # Supprimer la relation utilisateur-groupe
-        db.delete(relation)
-        db.commit()  # Commit après suppression de la relation
-        
-        # Vérifier le nombre d'administrateurs restants dans le groupe
-        admin_count = get_admin_count(id_groupe=id_groupe, db=db)
-        
-        if admin_count <= 0:
-            groupe = db.query(models.Groupe).filter(models.Groupe.id_groupe == id_groupe).first()
-            if groupe:
-                db.delete(groupe)  # Supprimer le groupe si plus d'administrateurs
-                db.commit()  # Commit après suppression du groupe
-        
-        # Retourner une réponse avec statut 200 OK
-        return {"detail": "Relation supprimée avec succès."}
+
+        if admin_of_class or pseudo_utilisateur == current_user.pseudo:
+            # Chercher la relation entre l'utilisateur et le groupe
+            relation = db.query(models.UtilisateurGroupe).filter(
+                models.UtilisateurGroupe.id_groupe == id_groupe,
+                models.UtilisateurGroupe.pseudo_utilisateur == pseudo_utilisateur
+            ).first()
+            
+            # Vérifier si la relation existe
+            if not relation:
+                raise HTTPException(status_code=404, detail="L'utilisateur n'est pas membre de cette classe")
+            
+            # Supprimer la relation utilisateur-groupe
+            db.delete(relation)
+            db.commit()  # Commit après suppression de la relation
+            
+            # Vérifier le nombre d'administrateurs restants dans le groupe
+            admin_count = get_admin_count(id_groupe=id_groupe, db=db)
+            
+            if admin_count <= 0:
+                groupe = db.query(models.Groupe).filter(models.Groupe.id_groupe == id_groupe).first()
+                if groupe:
+                    db.delete(groupe)  # Supprimer le groupe si plus d'administrateurs
+                    db.commit()  # Commit après suppression du groupe
+            
+            # Retourner une réponse avec statut 200 OK
+            return {"detail": "Relation supprimée avec succès."}
+        else:
+            raise HTTPException(status_code=403, detail="Accès restreint: Vous n'avez pas l'authorisation de modifier les informations de cet utilisateur pour cette classe")
     
     except HTTPException as e:
         raise e  # Relever les exceptions HTTP comme 404
