@@ -34,7 +34,7 @@ from pydantic_models import (
     SousCoursBase, SousCoursModele,
     GroupeBase, GroupeModele,
     UtilisateurGroupeBase, UtilisateurGroupeModele,
-    UtilisateurBadgeModele, ExerciceBase, ExerciceModele,
+    ExerciceBase, ExerciceModele,
     ExerciceUtilisateurBase, ExerciceUtilisateurModele,UpdateCptDefiRequest,
     PasswordChangeRequest,
 )
@@ -43,32 +43,6 @@ app = FastAPI()
 scheduler = BackgroundScheduler()
 
 
-def increment_weekly_challenge():
-    try:
-        db = SessionLocal()
-        defi_semaine = db.query(models.DefiSemaine).first()
-        
-        if not defi_semaine:
-            defi_semaine = models.DefiSemaine(numero_defi=1)
-            db.add(defi_semaine)
-        else:
-            defi_semaine.numero_defi += 1
-        
-        db.commit()
-        print(f"✅ Nouveau numéro de défi : {defi_semaine.numero_defi}")
-        
-    except Exception as e:
-        print(f"❌ Erreur lors de la mise à jour du défi : {str(e)}")
-    finally:
-        db.close()
-
-# Modifier le scheduler pour utiliser directement la fonction synchrone
-scheduler.add_job(
-    increment_weekly_challenge,
-    trigger=CronTrigger(day_of_week='mon', hour=4, minute=0),
-    id='increment_weekly_challenge',
-    replace_existing=True
-)
 
 # Configuration CORS configuration to allow access from specific origins
 origins = [
@@ -139,6 +113,36 @@ async def on_startup():
             print("Les données des badges sont déjà initialisées.")
     finally:
         db.close()
+
+
+def increment_weekly_challenge():
+    try:
+        db = SessionLocal()
+        defi_semaine = db.query(models.DefiSemaine).first()
+        
+        if not defi_semaine:
+            defi_semaine = models.DefiSemaine(numero_defi=1)
+            db.add(defi_semaine)
+            db.commit()
+        else:
+            attribuer_badges_classement(defi_semaine.numero_defi, db)
+            defi_semaine.numero_defi += 1
+            db.commit()
+            print(f"✅ Nouveau numéro de défi : {defi_semaine.numero_defi}")
+        
+    except Exception as e:
+        print(f"❌ Erreur lors de la mise à jour du défi : {str(e)}")
+    finally:
+        db.close()
+
+
+# Modifier le scheduler pour utiliser directement la fonction synchrone
+scheduler.add_job(
+    increment_weekly_challenge,
+    trigger=CronTrigger(day_of_week='mon', hour=4, minute=0),
+    id='increment_weekly_challenge',
+    replace_existing=True
+)
 
 # Fetch user logic
 def get_utilisateur(db, pseudo: str):
@@ -1331,6 +1335,51 @@ async def recuperer_membres_badge(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des membres du badge : {str(e)}")  
    
+
+def attribuer_badges_classement(idDefi, db):
+    try:
+        reussites_defi = db.query(models.UtilisateurDefi).filter(models.UtilisateurDefi.id_defi == idDefi).all()
+        if not reussites_defi:
+            print(f"Aucune réussite trouvée pour le défi {idDefi}")
+            return
+        
+        reussites_defi_triees = sorted(reussites_defi, key=lambda x: x.temps_reussite)
+        utilisateurs_traites = set()
+        position = 0
+                
+        for reussite in reussites_defi_triees:
+            pseudo = reussite.pseudo_utilisateur
+            
+            if pseudo in utilisateurs_traites:
+                continue
+                
+            position += 1
+            utilisateurs_traites.add(pseudo)
+            if position > 10:
+                break
+            
+            # Récupérer les badges actuels de l'utilisateur
+            badges_utilisateur = db.query(models.UtilisateurBadge).filter(models.UtilisateurBadge.pseudo_utilisateur == pseudo).all()
+            badge_ids_utilisateur = [badge.id_badge for badge in badges_utilisateur]
+            
+            if position == 1 and 3 not in badge_ids_utilisateur:
+                new_badge = models.UtilisateurBadge(pseudo_utilisateur=pseudo, id_badge=3)
+                db.add(new_badge)
+            if position <= 5 and 2 not in badge_ids_utilisateur:
+                new_badge = models.UtilisateurBadge(pseudo_utilisateur=pseudo, id_badge=2)
+                db.add(new_badge)
+            if position <= 10 and 1 not in badge_ids_utilisateur:
+                new_badge = models.UtilisateurBadge(pseudo_utilisateur=pseudo, id_badge=1)
+                db.add(new_badge)
+
+        if position == 0:
+            return    
+        db.commit()
+
+    except Exception as e:
+        db.rollback()
+        print(f"Erreur lors de l'attribution des badges : {str(e)}")
+
 
 # Créer un exercice
 @app.post('/exercices/', response_model=ExerciceModele)
