@@ -93,6 +93,13 @@ class Stat(Base):
 
     # Relation avec Utilisateur
     utilisateur_concerne = relationship("Utilisateur", back_populates="stat_concerne")
+
+class ProfilePicture(Base):
+    __tablename__ = 'PROFILEPICTURE'
+    
+    id_photo = Column(Integer, primary_key=True, autoincrement=True)
+    image = Column(String(128), nullable=False)
+
     
 # Tables de jointure
 
