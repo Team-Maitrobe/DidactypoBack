@@ -1,15 +1,16 @@
 -- Photo 1
-INSERT INTO PROFILEPICTURE
-VALUES (1, '/pdp/1.jpg');
 
--- Photo 2
-INSERT INTO PROFILEPICTURE
-VALUES (2, '/pdp/2.jpg');
+INSERT INTO PROFILEPICTURE(chemin_image, nom_image)
+VALUES ('/pdp/IconCompte.png', 'Photo de base de compte');
 
--- Photo 3
-INSERT INTO PROFILEPICTURE
-VALUES (3, '/pdp/3.jpg');
+INSERT INTO PROFILEPICTURE(chemin_image, nom_image) 
+VALUES ('/pdp/1.png', 'Photo d''un aventurier');
 
--- Photo 4
-INSERT INTO PROFILEPICTURE
-VALUES (4, '/pdp/4.jpg');
+INSERT INTO PROFILEPICTURE(chemin_image, nom_image) 
+VALUES ('/pdp/2.png', 'Photo d''un pirate');
+
+INSERT INTO PROFILEPICTURE(chemin_image, nom_image) 
+VALUES ('/pdp/3.png', 'Photo d''un astronaute');
+
+INSERT INTO PROFILEPICTURE(chemin_image, nom_image) 
+VALUES ('/pdp/4.png', 'Photo d''un roi');

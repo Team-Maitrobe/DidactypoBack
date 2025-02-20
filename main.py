@@ -36,7 +36,7 @@ from pydantic_models import (
     UtilisateurGroupeBase, UtilisateurGroupeModele,
     UtilisateurBadgeModele, ExerciceBase, ExerciceModele,
     ExerciceUtilisateurBase, ExerciceUtilisateurModele,UpdateCptDefiRequest,
-    PasswordChangeRequest,
+    PasswordChangeRequest, ProfilePicture, UpdatePdp,utilisateurPdp, UtilisateurCompte
 )
 
 app = FastAPI()
@@ -105,10 +105,12 @@ async def on_startup():
     exercices_sql_file_path = Path(__file__).parent / "exercices.sql"
     badges_sql_file_path = Path(__file__).parent / "badges.sql"
     defi_sql_file_path = Path(__file__).parent / "defi.sql"
+    pp_sql_file_path = Path(__file__).parent / "photodeprofil.sql"
     scheduler.start()
 
-
     db = SessionLocal()
+
+    print(is_initialized(db, models.ProfilePicture))  # Doit afficher False si pas encore initialisé
     try:
         if not is_initialized(db, models.Cours):
             # Run the SQL file only if the database is uninitialized
@@ -137,6 +139,13 @@ async def on_startup():
             print("La base de données a été initialisée avec les données des defi.")
         else:
             print("Les données des badges sont déjà initialisées.")
+
+        # Vérifie et initialise les données pour les photos de profil
+        if not is_initialized(db, models.ProfilePicture): # Debug
+            execute_sql_file(pp_sql_file_path)
+            print("La base de données a été intialisée avec les données des photos de profil. ")
+        else:
+            print("Les données des photos de profil sont déjà initialisées.")
     finally:
         db.close()
 
@@ -161,7 +170,7 @@ async def creer_utilisateur(utilisateur: UtilisateurBase, db: Session = Depends(
             est_admin=utilisateur.est_admin,
             numCours=utilisateur.numCours,
             tempsTotal=utilisateur.tempsTotal,
-            cptDefi=0  # Valeur par défaut pour cptDefi
+            cptDefi=0,  # Valeur par défaut pour cptDefi
             )
         db.add(db_utilisateur)
         db.commit()
@@ -179,6 +188,15 @@ async def lire_utilisateurs(db: Session = Depends(get_db), skip: int = 0, limit:
             return Response(status_code=204)
         valUtilisateurs = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom, cptDefi=user.cptDefi) for user in utilisateurs]
         return valUtilisateurs
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching users: {str(e)}")
+    
+@app.get('/utilisateurCompte/{pseudo}', response_model=UtilisateurCompte)
+async def lire_utilisateurCompte(pseudo: str ,db: Session = Depends(get_db), skip: int=0, limit: int = 100):
+    try:         
+        user = get_utilisateur(db, pseudo)
+        valUtilisateurCompte = UtilisateurCompte(pseudo=user.pseudo,nom=user.pseudo, prenom=user.prenom, courriel=user.courriel )
+        return valUtilisateurCompte
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching users: {str(e)}")
 
@@ -202,8 +220,17 @@ async def lire_utilisateur(pseudo: str, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération de l'utilisateur : {str(e)}")
 
+@app.get('/utilisateurPdp/{pseudo}', response_model=utilisateurPdp)
+async def lire_pdp_utilisateur(pseudo: str, db: Session = Depends(get_db)):
+    try:
+        utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
+        if not utilisateur:
+            return Response(status_code=204)
+        return utilisateur
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération de l'utilisateur : {str(e)}")
 
-@app.put('/utilisateurs/{pseudo}/cptDefi', response_model=UtilisateurModele)
+@app.put('/utilisateurs/{pseudo}/cptDefi', response_model=utilisateurPdp)
 async def mettre_a_jour_cpt_defi(
     pseudo: str,
     update_request: UpdateCptDefiRequest,  # Validation avec Pydantic
@@ -223,6 +250,25 @@ async def mettre_a_jour_cpt_defi(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour de cptDefi : {str(e)}")
 
+@app.put('/utilisateurs/{pseudo}/pdp', response_model=utilisateurPdp)
+async def mettre_a_jour_pdp(
+    pseudo: str,
+    update_request: UpdatePdp,  # Validation avec Pydantic
+    db: Session = Depends(get_db)  # Injection de la session DB
+):
+    try:
+        # Rechercher l'utilisateur dans la base de données
+        utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo == pseudo).first()
+        if not utilisateur:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+
+        # Mettre à jour le champ `cptDefi`
+        utilisateur.pdpActuelle = update_request.pdpActuelle
+        db.commit()
+        db.refresh(utilisateur)  # Recharger les données mises à jour depuis la DB
+        return utilisateur
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la mise à jour de la photo de profil : {str(e)}")
 
 @app.patch("/modification_mdp")
 async def modifier_mdp(request: PasswordChangeRequest, db: Session = Depends(get_db)):
@@ -1354,3 +1400,13 @@ def get_defi_semaine(db: Session = Depends(get_db)):
             status_code=500,
             detail=f"Erreur lors de la récupération du numéro de défi : {str(e)}"
         )
+    
+@app.get("/photo_profil", response_model=list[ProfilePicture])
+def get_profile_pictures(db: Session = Depends(get_db)):
+    pictures = db.query(models.ProfilePicture).all()
+    return pictures
+
+@app.get("/photo_profil/{id_photo}", response_model=ProfilePicture)
+def get_profile_picture_id(id_photo: int,db: Session = Depends(get_db)):
+    photo = db.query(models.ProfilePicture).filter(models.ProfilePicture.id_photo == id_photo).first()
+    return photo
