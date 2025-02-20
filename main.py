@@ -36,7 +36,7 @@ from pydantic_models import (
     UtilisateurGroupeBase, UtilisateurGroupeModele,
     ExerciceBase, ExerciceModele,
     ExerciceUtilisateurBase, ExerciceUtilisateurModele,UpdateCptDefiRequest,
-    PasswordChangeRequest,
+    PasswordChangeRequest,ExerciceGroupeBase,ExerciceGroupeModel
 )
 
 app = FastAPI()
@@ -978,6 +978,47 @@ async def lire_admin_groupe(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des relations groupe-utilisateur : {str(e)}")
 
+@app.get('/admins_par_groupe{id_groupe}/', response_model=List[UtilisateurRenvoye])
+async def lire_admin_groupe(
+    id_groupe: int,
+    db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
+    skip: int = 0,  # Paramètre optionnel pour le décalage (pagination)
+    limit: int = 100  # Paramètre optionnel pour la limite du nombre de résultats
+):
+    try:
+        # Récupérer les utilisateurs du groupe qui sont des administrateurs
+        pseudo_admins = db.query(models.UtilisateurGroupe).filter(
+            (models.UtilisateurGroupe.id_groupe == id_groupe) & 
+            (models.UtilisateurGroupe.est_admin == True)
+        ).offset(skip).limit(limit).all()
+        
+        if not pseudo_admins:
+            raise HTTPException(status_code=404, detail=f"Aucun administrateur dans la classe : {id_groupe}")
+        
+        # Récupérer les informations des administrateurs
+        db_admins = db.query(models.Utilisateur).join(
+            models.UtilisateurGroupe, 
+            models.Utilisateur.pseudo == models.UtilisateurGroupe.pseudo_utilisateur
+        ).filter(
+            models.UtilisateurGroupe.id_groupe == id_groupe, 
+            models.UtilisateurGroupe.est_admin == True
+        ).offset(skip).limit(limit).all()
+        
+        if not db_admins:
+            raise HTTPException(status_code=404, detail="Aucune information trouvée pour les administrateurs")
+        
+        # Retourner les informations des administrateurs sous forme de liste d'objets UtilisateurRenvoye
+        infos_admins = [UtilisateurRenvoye(pseudo=admin.pseudo, nom=admin.nom, prenom=admin.prenom) for admin in db_admins]
+        
+        return infos_admins
+    
+    except HTTPException as e:
+        raise e
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des relations groupe-utilisateur : {str(e)}")
+
+
 def get_admin_count(
     id_groupe: int,
     db
@@ -990,51 +1031,6 @@ def get_admin_count(
 
     # Retourner le nombre total d'administrateurs dans le groupe
     return total_admins
-    
-@app.get('/membre_classe_par_groupe/{id_groupe}', response_model=List[UtilisateurRenvoye])
-async def lire_tous_les_membres_classe(
-    id_groupe: int,
-    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
-    db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
-    skip: int = 0,  # Paramètre optionnel pour le décalage (pagination)
-    limit: int = 100  # Paramètre optionnel pour la limite du nombre de résultats
-):
-    try:
-        # Ne retourner les infos uniquement si l'utilisateur fait lui même parti de cette classe
-        membre_groupe = db.query(models.UtilisateurGroupe).filter(
-            (models.UtilisateurGroupe.pseudo_utilisateur == current_user.pseudo) & 
-            (models.UtilisateurGroupe.id_groupe == id_groupe)
-            ).first()
-        
-        if not membre_groupe:
-            raise HTTPException(status_code=403, detail="Accès restreint : vous ne faites pas parti de cette classe")
-        else :
-            # Récupérer les relations entre groupes et utilisateurs pour un groupe spécifique
-            membres_classe = db.query(models.UtilisateurGroupe).filter(
-                (models.UtilisateurGroupe.id_groupe == id_groupe) &
-                (models.UtilisateurGroupe.est_admin == False)
-                ).offset(skip).limit(limit).all()
-
-            if not membres_classe:
-                return Response(status_code=204)
-
-            # Extraire les pseudos des membres
-            pseudos_membres = [membre.pseudo_utilisateur for membre in membres_classe]
-
-            # Récupérer les informations des utilisateurs (modèle Utilisateur) en fonction des pseudos
-            utilisateurs = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo.in_(pseudos_membres)).all()
-
-            # Convertir les utilisateurs en objets UtilisateurRenvoye
-            utilisateurs_renvoyes = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom) for user in utilisateurs]
-
-            return utilisateurs_renvoyes
-    
-    except HTTPException as e:
-        raise e
-    
-    except Exception as e:
-        # Gestion des erreurs
-        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des relations groupe-utilisateur : {str(e)}")
     
 @app.get('/membre_est_admin/{id_groupe}', response_model=bool)
 async def verifier_admin_classe(
@@ -1213,7 +1209,62 @@ async def supprimer_relation_utilisateur_groupe(
         # Gestion des erreurs générales
         raise HTTPException(status_code=500, detail=f"Erreur lors de la suppression de la relation : {str(e)}")
 
+
+@app.post("/exercice_groupe/",response_model=ExerciceGroupeModel)
+async def ajouter_exercice_groupe(ex_data : ExerciceGroupeBase,db: Session = Depends(get_db)):
+    #créer nouveau exercice dans table Exercice (commun aux exerices dans la partie apprendre)
+    new_exo = models.ExerciceGroupe(
+        id_exercice = ex_data.id_exercice,
+        id_groupe = ex_data.id_groupe
+    )
     
+    try:
+        db.add(new_exo)
+        db.commit()
+        db.refresh(new_exo)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erreur pendant l'ajout d'un exercice de groupe: {str(e)}")
+    
+    
+
+    return new_exo
+
+
+@app.get("/exercice_groupe/", response_model=List[ExerciceGroupeModel])
+async def lire_tous_exercice_groupe(db: Session = Depends(get_db), skip: int = 0, limit: int = 100):
+    e = db.query(models.ExerciceGroupe).offset(skip).limit(limit).all()
+    return e
+
+#retourne tous les exercices liés au groupe
+@app.get("/exercice_groupe/{id_groupe}",response_model=List[ExerciceModele])
+async def lire_exercice_groupe(id_groupe: int, db: Session = Depends(get_db)):
+    e = (
+        db.query(models.Exercice).join(models.ExerciceGroupe,models.ExerciceGroupe.id_exercice == models.Exercice.id_exercice)
+        .filter(models.ExerciceGroupe.id_groupe == id_groupe).all()
+    )
+
+    if not e:
+        raise HTTPException(status_code=404, detail="Aucun exercice trouvé")
+    return e
+
+@app.delete("/exercice_groupe/{id_groupe}/{id_exercice}")
+async def supprimer_exercice_groupe(id_groupe: int,id_exercice: int, db: Session = Depends(get_db)):
+    #Supprime uniquement la liaison et non l'exercice lui même, ceci est fait par le front en appelant le delete d'exercice
+    db_liaison = db.query(models.ExerciceGroupe).filter(models.ExerciceGroupe.id_groupe == id_groupe,
+    models.ExerciceGroupe.id_exercice == id_exercice).first()
+    if not db_liaison:
+        raise HTTPException(status_code=404, detail="Laision Exercice-Groupe non trouvé")
+    
+    id_e = db_liaison.id_exercice
+    id_g = db_liaison.id_groupe
+
+    db.delete(db_liaison)
+    db.commit()
+
+    return {"message": f"laison Exercice-Groupe {id_e}-{id_g} supprimée avec succès."}
+
+
 # Badges
 @app.post("/badges/", response_model=BadgeModele)
 async def add_badge(badge_data: BadgeBase, db: Session = Depends(get_db)):
