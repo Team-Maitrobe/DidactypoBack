@@ -1032,51 +1032,6 @@ def get_admin_count(
     # Retourner le nombre total d'administrateurs dans le groupe
     return total_admins
     
-@app.get('/membre_classe_par_groupe/{id_groupe}', response_model=List[UtilisateurRenvoye])
-async def lire_tous_les_membres_classe(
-    id_groupe: int,
-    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
-    db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
-    skip: int = 0,  # Paramètre optionnel pour le décalage (pagination)
-    limit: int = 100  # Paramètre optionnel pour la limite du nombre de résultats
-):
-    try:
-        # Ne retourner les infos uniquement si l'utilisateur fait lui même parti de cette classe
-        membre_groupe = db.query(models.UtilisateurGroupe).filter(
-            (models.UtilisateurGroupe.pseudo_utilisateur == current_user.pseudo) & 
-            (models.UtilisateurGroupe.id_groupe == id_groupe)
-            ).first()
-        
-        if not membre_groupe:
-            raise HTTPException(status_code=403, detail="Accès restreint : vous ne faites pas parti de cette classe")
-        else :
-            # Récupérer les relations entre groupes et utilisateurs pour un groupe spécifique
-            membres_classe = db.query(models.UtilisateurGroupe).filter(
-                (models.UtilisateurGroupe.id_groupe == id_groupe) &
-                (models.UtilisateurGroupe.est_admin == False)
-                ).offset(skip).limit(limit).all()
-
-            if not membres_classe:
-                return Response(status_code=204)
-
-            # Extraire les pseudos des membres
-            pseudos_membres = [membre.pseudo_utilisateur for membre in membres_classe]
-
-            # Récupérer les informations des utilisateurs (modèle Utilisateur) en fonction des pseudos
-            utilisateurs = db.query(models.Utilisateur).filter(models.Utilisateur.pseudo.in_(pseudos_membres)).all()
-
-            # Convertir les utilisateurs en objets UtilisateurRenvoye
-            utilisateurs_renvoyes = [UtilisateurRenvoye(pseudo=user.pseudo, nom=user.nom, prenom=user.prenom) for user in utilisateurs]
-
-            return utilisateurs_renvoyes
-    
-    except HTTPException as e:
-        raise e
-    
-    except Exception as e:
-        # Gestion des erreurs
-        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des relations groupe-utilisateur : {str(e)}")
-    
 @app.get('/membre_est_admin/{id_groupe}', response_model=bool)
 async def verifier_admin_classe(
     id_groupe: int,  # ID du groupe à vérifier
