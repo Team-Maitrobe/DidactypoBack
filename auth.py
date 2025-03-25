@@ -5,7 +5,7 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 
 # éxecuter "openssl rand -hex 32" pour obtenir une nouvelle clef
-SECRET_KEY = "73980ab468f0a5be1b530fbe5c7e43654aee29faf486bcd63040de51105b951a"
+SECRET_KEY = ""
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 600
 
