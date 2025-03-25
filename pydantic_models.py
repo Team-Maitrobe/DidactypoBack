@@ -23,8 +23,24 @@ class UtilisateurRenvoye(BaseModel):
     nom: str
     prenom: str
 
+class UtilisateurCompte(BaseModel):
+    pseudo: str
+    nom: str
+    prenom: str
+    courriel: str
+
+class utilisateurPdp(BaseModel):
+    pseudo: str
+    pdpActuelle: int
+
+    class Config:
+        orm_mode = True
+
 class UpdateCptDefiRequest(BaseModel):
     cptDefi: int
+
+class UpdatePdp(BaseModel):
+    pdpActuelle: int
 
 #Utilisé uniquement pour afficher les statistiques d'un utilisateur
 class StatsUtilisateur(BaseModel):
@@ -161,6 +177,16 @@ class PasswordChangeRequest(BaseModel):
     ancien_mdp: str
     new_mdp: str
 
+class ProfilePicture(BaseModel):
+    id_photo:int
+    chemin_image:str
+    nom_image:str
+
+class ProfilePictureResponse(BaseModel):
+    pseudo_utilisateur: str
+    id_photo: int
+    chemin_image: str
+    nom_image: str
 #Liaison entre un groupe et ces exerices
 class ExerciceGroupeBase(BaseModel):
     id_groupe : int
@@ -169,3 +195,4 @@ class ExerciceGroupeBase(BaseModel):
 class ExerciceGroupeModel(ExerciceGroupeBase):
     class Config:
         orm_mode = True 
+

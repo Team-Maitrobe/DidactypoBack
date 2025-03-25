@@ -15,16 +15,21 @@ class Utilisateur(Base):
     numCours = Column(Integer)
     tempsTotal = Column(Integer)
     cptDefi = Column(Integer, default=0)
+    pdpActuelle = Column(Integer, default=1)
+
     # Relation avec ExerciceUtilisateur
     exercices_realises = relationship("ExerciceUtilisateur", back_populates="utilisateur")
 
-    # Relation avec Stat
-    # Suppression en cascade des statistiques liées
+    # Relation avec ProfilePictureUtilisateur
+    photos = relationship("ProfilePictureUtilisateur", back_populates="utilisateur")
+
+    # Relation avec Stat (Suppression en cascade des statistiques liées)
     stat_concerne = relationship(
         "Stat", 
         back_populates="utilisateur_concerne", 
         cascade="all, delete-orphan"
     )
+
 
 
 class Cours(Base):
@@ -93,7 +98,17 @@ class Stat(Base):
 
     # Relation avec Utilisateur
     utilisateur_concerne = relationship("Utilisateur", back_populates="stat_concerne")
+
+class ProfilePicture(Base):
+    __tablename__ = 'PROFILEPICTURE'
     
+    id_photo = Column(Integer, primary_key=True, autoincrement=True)
+    chemin_image = Column(String(128), nullable=False)
+    nom_image = Column(String(128), nullable=False)
+
+    # Relation avec ProfilePictureUtilisateur
+    utilisateurs_possedant = relationship("ProfilePictureUtilisateur", back_populates="photo")
+
 # Tables de jointure
 
 class UtilisateurCours(Base):
@@ -139,6 +154,14 @@ class ExerciceUtilisateur(Base):
     utilisateur = relationship("Utilisateur", back_populates="exercices_realises")
     exercice = relationship("Exercice", back_populates="utilisateurs_ayant_realise")
 
+class ProfilePictureUtilisateur(Base):
+    __tablename__ = 'PROFILEPICTURE_UTILISATEUR'
+
+    pseudo_utilisateur = Column(String(15), ForeignKey('UTILISATEUR.pseudo'), primary_key=True)
+    id_photo = Column(Integer, ForeignKey('PROFILEPICTURE.id_photo'), primary_key=True)
+
+    utilisateur = relationship("Utilisateur", back_populates="photos")
+    photo = relationship("ProfilePicture", back_populates="utilisateurs_possedant")
 class ExerciceGroupe(Base):
     __tablename__ = 'EXERCICE_GROUPE'
 
@@ -147,3 +170,4 @@ class ExerciceGroupe(Base):
     
 
     #utilisateurs_ayant_realise = relationship("ExerciceMembreGroupe", back_populates="exercice")
+
