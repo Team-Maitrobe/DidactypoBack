@@ -161,7 +161,6 @@ def get_utilisateur(db, pseudo: str):
         return utilisateur
     return None
 
-<<<<<<< main.py
 # Utilisateur Routes
 @app.post('/utilisateurs/', response_model=UtilisateurModele)
 async def creer_utilisateur(utilisateur: UtilisateurBase, db: Session = Depends(get_db)):
@@ -200,9 +199,24 @@ async def lire_utilisateurs(db: Session = Depends(get_db), skip: int = 0, limit:
 @app.get('/utilisateurCompte/{pseudo}', response_model=UtilisateurCompte)
 async def lire_utilisateurCompte(pseudo: str ,db: Session = Depends(get_db), skip: int=0, limit: int = 100):
     try:         
-        user = get_utilisateur(db, pseudo)
-        valUtilisateurCompte = UtilisateurCompte(pseudo=user.pseudo,nom=user.pseudo, prenom=user.prenom, courriel=user.courriel )
-        return valUtilisateurCompte
+        if pseudo:
+            user = get_utilisateur(db, pseudo)
+            if user:
+                valUtilisateurCompte = UtilisateurCompte(
+                    pseudo=user.pseudo,
+                    nom=user.nom,  # Fixed typo: changed user.pseudo to user.nom
+                    prenom=user.prenom,
+                    courriel=user.courriel
+                )
+                return valUtilisateurCompte
+            else:
+                raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        else:
+            return Response(status_code=204)
+        
+    except HTTPException as e:
+        raise e
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching users: {str(e)}")
 
@@ -293,13 +307,11 @@ async def modifier_mdp(request: PasswordChangeRequest, db: Session = Depends(get
     # Vérification du nouveau mot de passe
     if not new_mdp.strip():
         raise HTTPException(status_code=400, detail="Le nouveau mot de passe ne peut pas être vide")
-=======
 # Admin logic
 def is_admin(
         pseudo: str,
         db: Session
         ) -> bool:
->>>>>>> main.py
     
     try:
         user = get_utilisateur(db, pseudo)
@@ -1122,40 +1134,48 @@ async def lire_admin_groupe(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des relations groupe-utilisateur : {str(e)}")
 
-@app.get('/admins_par_groupe{id_groupe}/', response_model=List[UtilisateurRenvoye])
-async def lire_admin_groupe(
+@app.get('/membres_classe_par_groupe/{id_groupe}', response_model=List[UtilisateurRenvoye])
+async def lire_membres_classe_groupe(
+    current_user: Annotated[models.Utilisateur, Depends(get_utilisateur_courant)],
     id_groupe: int,
     db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
     skip: int = 0,  # Paramètre optionnel pour le décalage (pagination)
-    limit: int = 100  # Paramètre optionnel pour la limite du nombre de résultats
+    limit: int = 100,  # Paramètre optionnel pour la limite du nombre de résultats
 ):
     try:
-        # Récupérer les utilisateurs du groupe qui sont des administrateurs
-        pseudo_admins = db.query(models.UtilisateurGroupe).filter(
+        # Ne retourner ces infos que si l'utilisateur fait partie de cette classe
+        membre_groupe = db.query(models.UtilisateurGroupe).filter(
+            (models.UtilisateurGroupe.pseudo_utilisateur == current_user.pseudo) &
+            (models.UtilisateurGroupe.id_groupe == id_groupe)
+            ).first()
+        
+        if not membre_groupe:
+            raise HTTPException(status_code=403, detail="Accès restreint : vous ne faites pas partie de cette classe")
+        # Récupérer les utilisateurs du groupe qui ne sont pas des administrateurs
+        pseudo_membres = db.query(models.UtilisateurGroupe).filter(
             (models.UtilisateurGroupe.id_groupe == id_groupe) & 
-            (models.UtilisateurGroupe.est_admin == True)
+            (models.UtilisateurGroupe.est_admin == False)
         ).offset(skip).limit(limit).all()
         
-        if not pseudo_admins:
-            raise HTTPException(status_code=404, detail=f"Aucun administrateur dans la classe : {id_groupe}")
+        if not pseudo_membres:
+            raise HTTPException(status_code=404, detail=f"Aucun membre dans la classe : {id_groupe}")
         
-        # Récupérer les informations des administrateurs
-        db_admins = db.query(models.Utilisateur).join(
-            models.UtilisateurGroupe, 
+        # Renvoyer les ifnos des membres
+        db_membres = db.query(models.Utilisateur).join(
+            models.UtilisateurGroupe,
             models.Utilisateur.pseudo == models.UtilisateurGroupe.pseudo_utilisateur
         ).filter(
-            models.UtilisateurGroupe.id_groupe == id_groupe, 
-            models.UtilisateurGroupe.est_admin == True
+            models.UtilisateurGroupe.id_groupe == id_groupe,
+            models.UtilisateurGroupe.est_admin == False
         ).offset(skip).limit(limit).all()
-        
-        if not db_admins:
-            raise HTTPException(status_code=404, detail="Aucune information trouvée pour les administrateurs")
-        
-        # Retourner les informations des administrateurs sous forme de liste d'objets UtilisateurRenvoye
-        infos_admins = [UtilisateurRenvoye(pseudo=admin.pseudo, nom=admin.nom, prenom=admin.prenom) for admin in db_admins]
-        
-        return infos_admins
-    
+
+        if not db_membres:
+            return Response(status_code=204)
+
+        infos_membres = [UtilisateurRenvoye(pseudo=membre.pseudo, nom=membre.nom, prenom=membre.prenom) for membre in db_membres]
+
+        return infos_membres
+      
     except HTTPException as e:
         raise e
     
@@ -1267,6 +1287,9 @@ async def lire_groupes_d_utilisateur(
     pseudo_utilisateur: str,  # Pseudo de l'utilisateur dont on veut les groupes
     db: Session = Depends(get_db),  # Dépendance pour obtenir la session de base de données
 ):
+    """
+    Retourne les informations de l'utilisateur dans le groupe
+    """
     try:
         # Récupérer le groupe auxquel appartient l'utilisateur
         groupe_utilisateur = db.query(models.UtilisateurGroupe).filter(
@@ -1285,6 +1308,9 @@ async def lire_groupes_d_utilisateur(
     
 @app.get('/membre_classes/{pseudo_utilisateur}', response_model=List[GroupeModele])
 async def lire_classes_utilisateur(pseudo_utilisateur: str, db: Session = Depends(get_db)):
+    """
+    Récupère la liste des classes auxquelles appartient un utilisateur
+    """
     try:
         groupes_utilisateur = db.query(models.UtilisateurGroupe).options(
             joinedload(models.UtilisateurGroupe.groupe)
@@ -1389,7 +1415,7 @@ async def lire_exercice_groupe(id_groupe: int, db: Session = Depends(get_db)):
     )
 
     if not e:
-        raise HTTPException(status_code=404, detail="Aucun exercice trouvé")
+        return Response(status_code=204)
     return e
 
 @app.delete("/exercice_groupe/{id_groupe}/{id_exercice}")
