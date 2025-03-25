@@ -162,3 +162,12 @@ class ProfilePictureUtilisateur(Base):
 
     utilisateur = relationship("Utilisateur", back_populates="photos")
     photo = relationship("ProfilePicture", back_populates="utilisateurs_possedant")
+class ExerciceGroupe(Base):
+    __tablename__ = 'EXERCICE_GROUPE'
+
+    id_exercice = Column(Integer, ForeignKey('EXERCICE.id_exercice'), primary_key=True)
+    id_groupe = Column(Integer,ForeignKey('GROUPE.id_groupe'),primary_key=True)
+    
+
+    #utilisateurs_ayant_realise = relationship("ExerciceMembreGroupe", back_populates="exercice")
+

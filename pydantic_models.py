@@ -187,3 +187,12 @@ class ProfilePictureResponse(BaseModel):
     id_photo: int
     chemin_image: str
     nom_image: str
+#Liaison entre un groupe et ces exerices
+class ExerciceGroupeBase(BaseModel):
+    id_groupe : int
+    id_exercice : int
+    
+class ExerciceGroupeModel(ExerciceGroupeBase):
+    class Config:
+        orm_mode = True 
+
