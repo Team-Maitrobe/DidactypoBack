@@ -1,13 +1,21 @@
 from typing import Optional
+import os
+from dotenv import load_dotenv
 
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
 from pydantic import BaseModel
 
-# éxecuter "openssl rand -hex 32" pour obtenir une nouvelle clef
-SECRET_KEY = ""
+# Load environment variables
+load_dotenv()
+
+# Get configuration from environment variables with fallbacks for backwards compatibility
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("JWT_SECRET_KEY environment variable is not set. Please set it in your .env file.")
+
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 600
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "600"))
 
 class Token(BaseModel):
     access_token: str
