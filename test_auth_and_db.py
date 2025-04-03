@@ -89,7 +89,7 @@ class TestAuthAndDatabase(unittest.TestCase):
                 time.sleep(1)
         else:
             raise RuntimeError("❌ Server failed to start after multiple attempts")
-    
+            
     @classmethod
     def tearDownClass(cls):
         """Shut down the server after tests and clean up."""
@@ -416,5 +416,57 @@ class TestAuthAndDatabase(unittest.TestCase):
             
             print(f"\n✅ TEST PASSED: Authentication failure scenarios verified")
 
+    @classmethod
+    def print_test_summary(cls, result):
+        """
+        Print a summary of passed and failed tests at the end of the test run.
+        
+        This method is called by unittest via addClassCleanup in setUpClass.
+        """
+        print("\n" + "=" * 80)
+        print("TEST SUMMARY".center(80))
+        print("=" * 80)
+        
+        total = result.testsRun
+        failures = len(result.failures)
+        errors = len(result.errors)
+        skipped = len(result.skipped)
+        passed = total - failures - errors - skipped
+        
+        # Calculate percentage
+        pass_rate = (passed / total) * 100 if total > 0 else 0
+        
+        print(f"\n📊 Test Results:")
+        print(f"  ✅ Passed:  {passed}/{total} ({pass_rate:.1f}%)")
+        print(f"  ❌ Failed:  {failures}")
+        print(f"  ⚠️ Errors:   {errors}")
+        print(f"  ⏭️ Skipped:  {skipped}")
+        
+        # Display failed tests if any
+        if failures > 0:
+            print("\n❌ Failed Tests:")
+            for test, trace in result.failures:
+                print(f"  - {test.id()}")
+        
+        # Display tests with errors if any
+        if errors > 0:
+            print("\n⚠️ Tests with Errors:")
+            for test, trace in result.errors:
+                print(f"  - {test.id()}")
+        
+        print("\n" + "=" * 80)
+
 if __name__ == "__main__":
+    # Create a test result collector
+    test_result = unittest.TestResult()
+    
+    # Create a test suite
+    test_suite = unittest.TestLoader().loadTestsFromTestCase(TestAuthAndDatabase)
+    
+    # Add cleanup function to print summary after tests
+    TestAuthAndDatabase.addClassCleanup(TestAuthAndDatabase.print_test_summary, test_result)
+    
+    # Run the tests
+    test_suite.run(test_result)
+else:
     unittest.main() 
