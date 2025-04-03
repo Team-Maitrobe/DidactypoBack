@@ -3,10 +3,10 @@
 ## Phase 1: Authentication & Authorization
 
 ### 1. Fix JWT Secret Key
-- [ ] Configure JWT secret key in .env file
-- [ ] Update auth.py to load secret from environment
-- [ ] Add secret key generation instructions in README
-- [ ] Test authentication with the new secure key
+- [x] Configure JWT secret key in .env file
+- [x] Update auth.py to load secret from environment
+- [x] Add secret key generation instructions in README
+- [x] Test authentication with the new secure key
 
 ### 2. Implement Access Control
 - [ ] Add proper permission verification for admin endpoints
