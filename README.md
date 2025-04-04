@@ -59,3 +59,37 @@ uvicorn main:app --reload
 ```
 
 Puis naviguer à l'adresse suivante : http://127.0.0.1:8000/docs 
+
+## Utilisation avec Docker
+
+### Prérequis
+- Docker installé sur votre machine
+- Docker Compose installé sur votre machine
+
+### Démarrer l'application avec Docker Compose
+1. Assurez-vous d'avoir configuré le fichier `.env` comme indiqué ci-dessus.
+
+2. Construire et démarrer les conteneurs Docker:
+```bash
+docker-compose up --build
+```
+
+3. Pour exécuter les conteneurs en arrière-plan (mode détaché):
+```bash
+docker-compose up -d
+```
+
+4. L'API sera accessible à l'adresse: http://localhost:8000/docs
+
+### Arrêter les conteneurs
+```bash
+docker-compose down
+```
+
+### Voir les logs
+```bash
+docker-compose logs -f
+```
+
+### Persistance des données
+Les données de la base SQLite sont stockées dans un volume Docker nommé `didactypo_data` pour assurer leur persistance entre les redémarrages des conteneurs. 
