@@ -111,10 +111,6 @@ class TestAuthAndDatabase(unittest.TestCase):
         cls.server_process.terminate()
         cls.server_process.wait()
         print("✅ Server shut down successfully")
-        
-        print("\n" + "=" * 80)
-        print("END OF TEST SUITE".center(80))
-        print("=" * 80)
     
     def test_01_create_user(self):
         """
