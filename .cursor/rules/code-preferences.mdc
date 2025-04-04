@@ -1,6 +1,11 @@
 ---
 description: 
 globs: 
+alwaysApply: false
+---
+---
+description: 
+globs: 
 alwaysApply: true
 ---
 - After making changes, ALWAYS make sure to start up a new server so I can test it.
@@ -27,3 +32,10 @@ alwaysApply: true
 - Create new git commits for each feature, Fix or else that you make. Make a 5 words long commit name and start by "FIX" if it is a fix, "FEAT" if it is a feature. Write the commit in French.
 - Always commit code when a full feature is changed or more than 1 Fix was made.. (exception if it is a big one.). Do commits according to best practices of version and git
 -  control.
+-  
+
+
+
+
+
+NEVER COMMIT ANY CHANGE WITHOUT MY EXPLICIT GO !!!
