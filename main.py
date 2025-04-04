@@ -12,7 +12,7 @@ from apscheduler.triggers.cron import CronTrigger
 import jwt
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc
-from fastapi import FastAPI, HTTPException, Depends, Query, Response, status, Request, Path
+from fastapi import FastAPI, HTTPException, Depends, Query, Response, status, Request, Path as FastAPIPath
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
