@@ -31,11 +31,11 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 # Password validation requirements
-PASSWORD_MIN_LENGTH = 8
-PASSWORD_REQUIRE_UPPERCASE = True
-PASSWORD_REQUIRE_LOWERCASE = True
-PASSWORD_REQUIRE_DIGITS = True
-PASSWORD_REQUIRE_SPECIAL = True
+PASSWORD_MIN_LENGTH = 3
+PASSWORD_REQUIRE_UPPERCASE = False
+PASSWORD_REQUIRE_LOWERCASE = False
+PASSWORD_REQUIRE_DIGITS = False
+PASSWORD_REQUIRE_SPECIAL = False
 PASSWORD_MAX_LENGTH = 64  # Prevent DoS with huge passwords
 
 # Password validation functions
