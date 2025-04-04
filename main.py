@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
-from typing import Annotated, List
+from typing import Annotated, List, Optional
 import asyncio
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -11,17 +11,19 @@ from apscheduler.triggers.cron import CronTrigger
 # Imports tiers
 import jwt
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
-from fastapi import FastAPI, HTTPException, Depends, Query, Response, status
+from sqlalchemy import func, desc
+from fastapi import FastAPI, HTTPException, Depends, Query, Response, status, Request, Path
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
+from fastapi.openapi.utils import get_openapi
 from jwt.exceptions import InvalidTokenError
 import time
-
+from sqlalchemy.exc import SQLAlchemyError
 
 # Imports internes
 from database import SessionLocal, engine, execute_sql_file, is_initialized
-from auth import Token, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM, pwd_context, oauth2_scheme
+from auth import Token, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM, pwd_context, oauth2_scheme, validate_password, is_common_password
 import models
 from pydantic_models import (
     IdClasses, UtilisateurBase,  UtilisateurModele,
@@ -115,7 +117,7 @@ async def on_startup():
         else:
             print("Les données des badges sont déjà initialisées.")
 
-        # Vérifie et initialise les données pour les photos de profil
+        # Vérifie et initialise les données pour les photos de profil
         if not is_initialized(db, models.ProfilePicture): # Debug
             execute_sql_file(pp_sql_file_path)
             print("La base de données a été intialisée avec les données des photos de profil. ")
@@ -165,6 +167,19 @@ def get_utilisateur(db, pseudo: str):
 @app.post('/utilisateurs/', response_model=UtilisateurModele)
 async def creer_utilisateur(utilisateur: UtilisateurBase, db: Session = Depends(get_db)):
     try:
+        # Validate the password security requirements
+        is_valid, error_message = validate_password(utilisateur.mot_de_passe)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error_message)
+            
+        # Check if password is in list of common/leaked passwords
+        if is_common_password(utilisateur.mot_de_passe):
+            raise HTTPException(
+                status_code=400, 
+                detail="Ce mot de passe est trop commun et facilement piratable. Veuillez choisir un mot de passe plus sécurisé."
+            )
+            
+        # Hash the password before storing
         utilisateur.mot_de_passe = get_mdp_hashe(utilisateur.mot_de_passe)
         db_utilisateur = models.Utilisateur(
             pseudo=utilisateur.pseudo,
@@ -175,15 +190,22 @@ async def creer_utilisateur(utilisateur: UtilisateurBase, db: Session = Depends(
             est_admin=utilisateur.est_admin,
             numCours=utilisateur.numCours,
             tempsTotal=utilisateur.tempsTotal,
-            cptDefi=0,  # Valeur par défaut pour cptDefi
+            cptDefi=0  # Valeur par défaut pour cptDefi
             )
         db.add(db_utilisateur)
         db.commit()
         db.refresh(db_utilisateur)
         return db_utilisateur
+    except SQLAlchemyError as e:
+        db.rollback()
+        # Handle specific database errors
+        raise HTTPException(status_code=500, detail=f"Erreur de base de données: {str(e)}")
+    except HTTPException as e:
+        # Re-raise HTTP exceptions without modification
+        raise e
     except Exception as e:
-        db.rollback()  # Rollback the transaction if an error occurs
-        raise HTTPException(status_code=500, detail=str(e))
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erreur interne: {str(e)}")
 
 @app.get('/utilisateurs/', response_model=List[UtilisateurRenvoye])
 async def lire_utilisateurs(db: Session = Depends(get_db), skip: int = 0, limit: int = 100):
@@ -307,6 +329,38 @@ async def modifier_mdp(request: PasswordChangeRequest, db: Session = Depends(get
     # Vérification du nouveau mot de passe
     if not new_mdp.strip():
         raise HTTPException(status_code=400, detail="Le nouveau mot de passe ne peut pas être vide")
+    
+    # Validate the new password security requirements
+    is_valid, error_message = validate_password(new_mdp)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_message)
+        
+    # Check if password is in list of common/leaked passwords
+    if is_common_password(new_mdp):
+        raise HTTPException(
+            status_code=400, 
+            detail="Ce mot de passe est trop commun et facilement piratable. Veuillez choisir un mot de passe plus sécurisé."
+        )
+    
+    # S'assurer que le nouveau mot de passe est différent de l'ancien
+    if verifier_mdp(new_mdp, db_utilisateur.mot_de_passe):
+        raise HTTPException(
+            status_code=400, 
+            detail="Le nouveau mot de passe doit être différent de l'ancien."
+        )
+    
+    try:
+        # Mise à jour du mot de passe
+        db_utilisateur.mot_de_passe = get_mdp_hashe(new_mdp)
+        db.commit()
+        return {"message": f"Mot de passe de '{pseudo}' modifié avec succès."}
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erreur de base de données: {str(e)}")
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Erreur interne, veuillez réessayer plus tard.")
+
 # Admin logic
 def is_admin(
         pseudo: str,
@@ -381,6 +435,19 @@ async def get_utilisateur_courant(token: Annotated[str, Depends(oauth2_scheme)],
 @app.post('/utilisateurs/', response_model=UtilisateurModele)
 async def creer_utilisateur(utilisateur: UtilisateurBase, db: Session = Depends(get_db)):
     try:
+        # Validate the password security requirements
+        is_valid, error_message = validate_password(utilisateur.mot_de_passe)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error_message)
+            
+        # Check if password is in list of common/leaked passwords
+        if is_common_password(utilisateur.mot_de_passe):
+            raise HTTPException(
+                status_code=400, 
+                detail="Ce mot de passe est trop commun et facilement piratable. Veuillez choisir un mot de passe plus sécurisé."
+            )
+            
+        # Hash the password before storing
         utilisateur.mot_de_passe = get_mdp_hashe(utilisateur.mot_de_passe)
         db_utilisateur = models.Utilisateur(
             pseudo=utilisateur.pseudo,
@@ -397,9 +464,16 @@ async def creer_utilisateur(utilisateur: UtilisateurBase, db: Session = Depends(
         db.commit()
         db.refresh(db_utilisateur)
         return db_utilisateur
+    except SQLAlchemyError as e:
+        db.rollback()
+        # Handle specific database errors
+        raise HTTPException(status_code=500, detail=f"Erreur de base de données: {str(e)}")
+    except HTTPException as e:
+        # Re-raise HTTP exceptions without modification
+        raise e
     except Exception as e:
-        db.rollback()  # Rollback the transaction if an error occurs
-        raise HTTPException(status_code=500, detail=str(e))
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erreur interne: {str(e)}")
 
 @app.get('/utilisateurs/', response_model=List[UtilisateurRenvoye])
 async def lire_utilisateurs(
@@ -512,11 +586,33 @@ async def modifier_mdp(request: PasswordChangeRequest, db: Session = Depends(get
     if not new_mdp.strip():
         raise HTTPException(status_code=400, detail="Le nouveau mot de passe ne peut pas être vide")
     
+    # Validate the new password security requirements
+    is_valid, error_message = validate_password(new_mdp)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_message)
+        
+    # Check if password is in list of common/leaked passwords
+    if is_common_password(new_mdp):
+        raise HTTPException(
+            status_code=400, 
+            detail="Ce mot de passe est trop commun et facilement piratable. Veuillez choisir un mot de passe plus sécurisé."
+        )
+    
+    # S'assurer que le nouveau mot de passe est différent de l'ancien
+    if verifier_mdp(new_mdp, db_utilisateur.mot_de_passe):
+        raise HTTPException(
+            status_code=400, 
+            detail="Le nouveau mot de passe doit être différent de l'ancien."
+        )
+    
     try:
         # Mise à jour du mot de passe
         db_utilisateur.mot_de_passe = get_mdp_hashe(new_mdp)
         db.commit()
         return {"message": f"Mot de passe de '{pseudo}' modifié avec succès."}
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erreur de base de données: {str(e)}")
     except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="Erreur interne, veuillez réessayer plus tard.")
