@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: didactypo_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - didactypo_data:/app/data
+    environment:
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+    restart: unless-stopped
+    command: >
+      sh -c "uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+
+volumes:
+  didactypo_data: 

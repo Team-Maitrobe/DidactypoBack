@@ -1,0 +1,746 @@
+openapi: 3.0.0
+info:
+  title: Didactypo API
+  description: API for Didactypo typing training application
+  version: 1.0.0
+servers:
+  - url: https://127.0.0.1:8000
+    description: Development server
+paths:
+  /token:
+    post:
+      summary: Authenticate a user
+      description: Authenticates a user and returns an access token
+      operationId: authenticateUser
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+              required:
+                - username
+                - password
+      responses:
+        '200':
+          description: Successfully authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+        '401':
+          description: Unauthorized - invalid credentials
+        '422':
+          description: Validation error
+
+  /utilisateurs/:
+    get:
+      summary: Get all users
+      description: Retrieves all users
+      operationId: getUsers
+      responses:
+        '200':
+          description: List of users
+    post:
+      summary: Create a new user
+      description: Creates a new user account
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pseudo:
+                  type: string
+                email:
+                  type: string
+                password:
+                  type: string
+                # Other user properties based on form data
+      responses:
+        '201':
+          description: User created successfully
+
+  /utilisateurs/{pseudo}/cptDefi:
+    put:
+      summary: Update challenge counter
+      description: Updates the counter of completed challenges for a user
+      operationId: updateChallengeCounter
+      parameters:
+        - name: pseudo
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cptDefi:
+                  type: integer
+      responses:
+        '200':
+          description: Challenge counter updated successfully
+
+  /utilisateurs/{pseudo}/pdp:
+    put:
+      summary: Update user profile picture
+      description: Updates the profile picture of a user
+      operationId: updateProfilePicture
+      parameters:
+        - name: pseudo
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pdpActuelle:
+                  type: string
+      responses:
+        '200':
+          description: Profile picture updated successfully
+
+  /utilisateurCompte/{pseudo}:
+    get:
+      summary: Get user account information
+      description: Retrieves account information for a specific user
+      operationId: getUserAccount
+      parameters:
+        - name: pseudo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User account information
+
+  /utilisateur/{pseudo}:
+    get:
+      summary: Get user information
+      description: Retrieves information for a specific user
+      operationId: getUser
+      parameters:
+        - name: pseudo
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User information
+        '404':
+          description: User not found
+
+  /utilisateurPdp/{pseudo}:
+    get:
+      summary: Get user profile picture ID
+      description: Retrieves the profile picture ID for a specific user
+      operationId: getUserProfilePictureId
+      parameters:
+        - name: pseudo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User profile picture ID
+
+  /photo_profil/{id_photo}:
+    get:
+      summary: Get profile picture
+      description: Retrieves a profile picture by its ID
+      operationId: getProfilePicture
+      parameters:
+        - name: id_photo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Profile picture information
+
+  /photo_profil:
+    get:
+      summary: Get all profile pictures
+      description: Retrieves all available profile pictures
+      operationId: getAllProfilePictures
+      responses:
+        '200':
+          description: List of profile pictures
+
+  /modification_mdp:
+    patch:
+      summary: Change user password
+      description: Changes the password for a user
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pseudo:
+                  type: string
+                mdpActuel:
+                  type: string
+                mdpNouveau:
+                  type: string
+              required:
+                - pseudo
+                - mdpActuel
+                - mdpNouveau
+      responses:
+        '200':
+          description: Password changed successfully
+
+  /defi_semaine:
+    get:
+      summary: Get weekly challenge
+      description: Retrieves the current weekly challenge
+      operationId: getWeeklyChallenge
+      responses:
+        '200':
+          description: Weekly challenge information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  numero_defi:
+                    type: integer
+
+  /defis:
+    get:
+      summary: Get all challenges
+      description: Retrieves all available challenges
+      operationId: getAllChallenges
+      responses:
+        '200':
+          description: List of challenges
+
+  /reussites_defi/utilisateurs/{pseudo}:
+    get:
+      summary: Get user challenge successes
+      description: Retrieves all successfully completed challenges for a user
+      operationId: getUserChallengeSuccesses
+      parameters:
+        - name: pseudo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of challenge successes for the user
+
+  /reussites_defi/{pseudo}:
+    get:
+      summary: Get user challenge successes
+      description: Alternative endpoint to retrieve challenge successes for a user
+      operationId: getUserChallengeSuccessesAlt
+      parameters:
+        - name: pseudo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of challenge successes for the user
+
+  /reussites_defi/defi/{idDefi}:
+    get:
+      summary: Get challenge successes by challenge ID
+      description: Retrieves all successes for a specific challenge
+      operationId: getChallengeSuccessesByChallenge
+      parameters:
+        - name: idDefi
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of successes for the specific challenge
+
+  /reussites_defi/:
+    post:
+      summary: Record challenge success
+      description: Records a successful challenge completion
+      operationId: recordChallengeSuccess
+      parameters:
+        - name: id_defi
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: temps_reussite
+          in: query
+          required: true
+          schema:
+            type: number
+            format: float
+        - name: Authorization
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Challenge success recorded
+
+  /gain_badge/:
+    post:
+      summary: Award badge to user
+      description: Awards a badge to a user
+      operationId: awardBadge
+      parameters:
+        - name: pseudo_utilisateur
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: id_badge
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '201':
+          description: Badge awarded successfully
+
+  /badge/{pseudo}:
+    get:
+      summary: Get user badges
+      description: Retrieves all badges earned by a user
+      operationId: getUserBadges
+      parameters:
+        - name: pseudo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of badges earned by the user
+
+  /badge_manquant/{badgeId}:
+    get:
+      summary: Get missing badge information
+      description: Retrieves information about a badge that the user doesn't have
+      operationId: getMissingBadgeInfo
+      parameters:
+        - name: badgeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Missing badge information
+
+  /badge_membres/{badgeId}:
+    get:
+      summary: Get users with badge
+      description: Retrieves all users who have earned a specific badge
+      operationId: getUsersWithBadge
+      parameters:
+        - name: badgeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of users with the badge
+
+  /stat/:
+    get:
+      summary: Get statistics
+      description: Retrieves statistics
+      operationId: getStatistics
+      responses:
+        '200':
+          description: Statistics information
+    post:
+      summary: Record statistic
+      description: Records a statistic for a user
+      operationId: recordStatistic
+      parameters:
+        - name: pseudo_utilisateur
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: type_stat
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: valeur_stat
+          in: query
+          required: true
+          schema:
+            type: number
+            format: float
+      responses:
+        '201':
+          description: Statistic recorded successfully
+
+  /cours/:
+    get:
+      summary: Get all courses
+      description: Retrieves all available courses
+      operationId: getAllCourses
+      responses:
+        '200':
+          description: List of all courses
+
+  /cours/{id_cours}:
+    get:
+      summary: Get course by ID
+      description: Retrieves a specific course by its ID
+      operationId: getCourseById
+      parameters:
+        - name: id_cours
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Course information
+
+  /sous_cours/{idCours}:
+    get:
+      summary: Get course sections
+      description: Retrieves all sections of a specific course
+      operationId: getCourseSections
+      parameters:
+        - name: idCours
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of course sections
+
+  /completion_cours:
+    post:
+      summary: Record course completion
+      description: Records that a user has completed a course
+      operationId: recordCourseCompletion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pseudo_utilisateur:
+                  type: string
+                id_sous_cours:
+                  type: integer
+      responses:
+        '201':
+          description: Course completion recorded
+
+  /exercices/:
+    get:
+      summary: Get all exercises
+      description: Retrieves all available exercises
+      operationId: getAllExercises
+      responses:
+        '200':
+          description: List of all exercises
+    post:
+      summary: Create an exercise
+      description: Creates a new exercise
+      operationId: createExercise
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                intitule_exercice:
+                  type: string
+                texte_exercice:
+                  type: string
+                # Other exercise properties
+      responses:
+        '201':
+          description: Exercise created successfully
+
+  /exercices_realises/:
+    post:
+      summary: Record exercise completion
+      description: Records that a user has completed an exercise
+      operationId: recordExerciseCompletion
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Exercise completion recorded
+
+  /exercices/{exerciseId}:
+    delete:
+      summary: Delete exercise
+      description: Deletes a specific exercise
+      operationId: deleteExercise
+      parameters:
+        - name: exerciseId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Exercise deleted successfully
+
+  /groupe/:
+    post:
+      summary: Create a group
+      description: Creates a new group/class
+      operationId: createGroup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nom_groupe:
+                  type: string
+                # Other group properties
+      responses:
+        '201':
+          description: Group created successfully
+
+  /groupe/{id}:
+    get:
+      summary: Get group by ID
+      description: Retrieves a specific group by its ID
+      operationId: getGroupById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Group information
+
+  /membre_classes/{pseudo}:
+    get:
+      summary: Get user groups
+      description: Retrieves all groups/classes that a user is a member of
+      operationId: getUserGroups
+      parameters:
+        - name: pseudo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of groups the user is a member of
+
+  /membre_classe/:
+    post:
+      summary: Add user to group
+      description: Adds a user to a specific group/class
+      operationId: addUserToGroup
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: User added to group successfully
+
+  /membres_classe:
+    delete:
+      summary: Remove user from group
+      description: Removes a user from a specific group/class
+      operationId: removeUserFromGroup
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: User removed from group successfully
+
+  /membres_classe_par_groupe/{idClasse}:
+    get:
+      summary: Get group members
+      description: Retrieves all members of a specific group/class
+      operationId: getGroupMembers
+      parameters:
+        - name: idClasse
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of group members
+
+  /admins_par_groupe/{id}:
+    get:
+      summary: Get group administrators
+      description: Retrieves all administrators of a specific group/class
+      operationId: getGroupAdmins
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of group administrators
+
+  /membre_est_admin/{idClasse}:
+    get:
+      summary: Check if user is group admin
+      description: Checks if a specific user is an administrator of a group/class
+      operationId: checkIfUserIsGroupAdmin
+      parameters:
+        - name: idClasse
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Result of the admin check
+
+  /admin_classe/:
+    patch:
+      summary: Update group admin status
+      description: Updates the admin status of a user in a group/class
+      operationId: updateGroupAdminStatus
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Admin status updated successfully
+
+  /exercice_groupe/{idClasse}:
+    get:
+      summary: Get group exercises
+      description: Retrieves all exercises assigned to a specific group/class
+      operationId: getGroupExercises
+      parameters:
+        - name: idClasse
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of group exercises
+
+  /exercice_groupe/:
+    post:
+      summary: Add exercise to group
+      description: Assigns an exercise to a specific group/class
+      operationId: addExerciseToGroup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id_groupe:
+                  type: integer
+                id_exercice:
+                  type: integer
+      responses:
+        '201':
+          description: Exercise added to group successfully
+
+  /exercice_groupe/{idClasse}/{exerciseId}:
+    delete:
+      summary: Remove exercise from group
+      description: Removes an exercise from a specific group/class
+      operationId: removeExerciseFromGroup
+      parameters:
+        - name: idClasse
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: exerciseId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Exercise removed from group successfully
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - bearerAuth: []

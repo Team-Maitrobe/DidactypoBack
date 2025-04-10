@@ -3,8 +3,19 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 import sqlite3
 from pathlib import Path
+import os
 
-DATABASE_FILE = Path(__file__).parent / 'db.sqlite3'  # Dynamically set database path
+# Check if we're running in Docker by looking for the environment variable
+is_docker = os.environ.get('DOCKER_ENV', False)
+
+# Set database path - if in Docker, use the data directory, otherwise use the current directory
+if is_docker:
+    # Ensure data directory exists
+    data_dir = Path('/app/data')
+    data_dir.mkdir(exist_ok=True)
+    DATABASE_FILE = data_dir / 'db.sqlite3'
+else:
+    DATABASE_FILE = Path(__file__).parent / 'db.sqlite3'  # Dynamically set database path
 
 engine = create_engine(f'sqlite:///{DATABASE_FILE}', connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
